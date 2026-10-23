@@ -55,7 +55,7 @@ export const requestHandler = async (req, res) => {
     }
   }
   // Mint short-lived, room-scoped LiveKit credentials only for authenticated members.
-  const voiceMatch = url.pathname.match(/^\\/api\\/v1\\/rooms\\/(\\d{1,18})\\/voice-token$/);
+  const voiceMatch = url.pathname.match(/^\/api\/v1\/rooms\/(\d{1,18})\/voice-token$/);
   if (req.method === 'POST' && voiceMatch) {
     try {
       const user = await authenticate(req.headers.authorization);
@@ -63,7 +63,7 @@ export const requestHandler = async (req, res) => {
       const key = process.env.AKIRA_LIVEKIT_API_KEY;
       const secret = process.env.AKIRA_LIVEKIT_API_SECRET;
       const wsUrl = process.env.AKIRA_LIVEKIT_URL;
-      if (!key || !secret || !/^wss:\\/\\//.test(wsUrl || '')) return send(503,{error:'voice_not_configured'});
+      if (!key || !secret || !/^wss:\/\//.test(wsUrl || '')) return send(503,{error:'voice_not_configured'});
       const {rows} = await getPool().query(
         'SELECT 1 FROM akira_room_members m JOIN akira_rooms r ON r.id=m.room_id WHERE r.public_id=$1 AND m.user_id=$2',
         [voiceMatch[1],user.id]);
@@ -97,7 +97,7 @@ export const requestHandler = async (req, res) => {
       return send(200,{ok:true,app:appId});
     } catch(err) { console.error('logout_failed',err.message); return send(503,{error:'auth_unavailable'}); }
   }
-  const roomWrite = req.method === 'POST' && (url.pathname === '/api/v1/rooms' || /^\\/api\\/v1\\/rooms\\/\\d{1,18}\\/(join|leave)$/.test(url.pathname));
+  const roomWrite = req.method === 'POST' && (url.pathname === '/api/v1/rooms' || /^\/api\/v1\/rooms\/\d{1,18}\/(join|leave)$/.test(url.pathname));
   if (roomWrite) {
     try {
       const user = await authenticate(req.headers.authorization);
@@ -114,7 +114,7 @@ export const requestHandler = async (req, res) => {
         const result = await createRoom(user,body);
         return send(result.status,result.body);
       }
-      const match = url.pathname.match(/^\\/api\\/v1\\/rooms\\/(\\d{1,18})\\/(join|leave)$/);
+      const match = url.pathname.match(/^\/api\/v1\/rooms\/(\d{1,18})\/(join|leave)$/);
       const result = match[2] === 'join' ? await joinRoom(user,match[1]) : await leaveRoom(user,match[1]);
       return send(result.status,result.body);
     } catch(err) {

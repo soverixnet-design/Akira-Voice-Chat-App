@@ -7,6 +7,9 @@ services:
       PORT: "4301"
     ports:
       - "127.0.0.1:4301:4301"
+    networks:
+      - default
+      - akira-private
     mem_limit: 192m
     cpus: 0.5
     security_opt:
@@ -19,3 +22,8 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+networks:
+  akira-private:
+    external: true
+    name: akira-private

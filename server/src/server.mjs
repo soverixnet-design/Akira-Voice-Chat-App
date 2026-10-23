@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { listRooms, getRoom } from './database.mjs';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
@@ -8,7 +9,7 @@ const appId = 'akira';
 const startedAt = new Date().toISOString();
 const allowedOrigins = new Set((process.env.AKIRA_ALLOWED_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean));
 
-export const requestHandler = (req, res) => {
+export const requestHandler = async (req, res) => {
   const url = new URL(req.url || '/', 'http://localhost');
   const origin = req.headers.origin;
   const originAllowed = Boolean(origin && allowedOrigins.has(origin));
@@ -40,6 +41,15 @@ export const requestHandler = (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/v1/status') {
     return send(200, { app: appId, status: 'foundation-only', productionReady: false,
       enabled: ['health', 'status'], pending: ['auth', 'database', 'rooms', 'voice', 'wallet', 'gifts', 'admin'] });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/v1/rooms') {
+    try { return send(200, { app: appId, rooms: await listRooms() }); }
+    catch (err) { console.error('room_list_failed', err.message); return send(503, { error: 'database_unavailable', app: appId }); }
+  }
+  const roomMatch = url.pathname.match(/^\/api\/v1\/rooms\/(\d{1,18})$/);
+  if (req.method === 'GET' && roomMatch) {
+    try { const room = await getRoom(roomMatch[1]); return room ? send(200, { app: appId, room }) : send(404, { error: 'room_not_found', app: appId }); }
+    catch (err) { console.error('room_read_failed', err.message); return send(503, { error: 'database_unavailable', app: appId }); }
   }
   return send(404, { error: 'not_found', app: appId });
 };

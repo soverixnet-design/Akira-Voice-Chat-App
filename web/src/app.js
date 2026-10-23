@@ -82,7 +82,7 @@ async function openRoom(r){
   if(!akiraToken()){showAuth("login");toast("Log in to enter a live room");return}
   try{await akiraRequest("/rooms/"+encodeURIComponent(r.id)+"/join","POST",undefined,akiraToken())}catch(e){toast(e.message||"Cannot join room");return}
   if(cur)leaveRoom();
-  AkiraBridge.setContext({name:r.name,emoji:r.emoji,theme:r.th,id:r.id,minor:!!A.minor});
+  AkiraBridge.setContext({name:r.name,emoji:r.emoji,theme:r.th,id:r.id,minor:!!A.minor,voiceAuth:akiraToken(),voiceApi:AKIRA_API_BASE});
   cur=r;
   $("rf").src="room.html";
   resumeRoom();

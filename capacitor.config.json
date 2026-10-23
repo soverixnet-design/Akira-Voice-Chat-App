@@ -1,0 +1,12 @@
+{
+  "appId": "com.akira.voice",
+  "appName": "Akira Voice Chat App",
+  "webDir": "dist",
+  "backgroundColor": "#07031a",
+  "ios": {"contentInset": "never"},
+  "android": {"backgroundColor": "#07031a"},
+  "plugins": {
+    "Keyboard": {"resize": "native", "style": "DARK", "resizeOnFullScreen": true},
+    "StatusBar": {"style": "DARK"}
+  }
+}

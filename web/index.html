@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Akira Voice Chat App</title>
+<meta name="theme-color" content="#07031a">
+<link rel="icon" type="image/png" href="assets/art-0cdad6e0e628.png">
+<link rel="apple-touch-icon" href="assets/art-0cdad6e0e628.png">
+<link rel="stylesheet" href="styles/app.css">
+<link rel="stylesheet" href="styles/viewport.css">
+</head>
+<body data-page="app">
+<div class="app" id="app">
+<i class="blob b1"></i><i class="blob b2"></i>
+<div class="views">
+ <section class="view on" id="v-home">
+  <div class="hd"><img class="logo" data-logo alt="Akira"><h1>Akira Voice Chat App<small>Voice rooms for chat, songs and games</small></h1><span class="pill" id="hc"></span></div>
+  <div class="srch">🔍<input id="q" placeholder="Search room name or ID" autocomplete="off"></div>
+  <div class="ban" id="ban"></div><div class="dots" id="dots"></div>
+  <div class="qa"><button id="qd"><span>🎁</span>Daily reward</button><button id="qr"><span>💎</span>Recharge</button><button id="qg"><span>🎮</span>Games</button><button id="qi"><span>🤝</span>Invite</button></div>
+  <div class="tabs" id="tabs"><button class="on">🔥 Popular</button><button>✨ New</button><button>🏠 My room</button></div>
+  <div class="grid" id="grid"></div>
+ </section>
+ <section class="view" id="v-rank"><div class="rtop"><button class="rbk" id="rbk">‹</button><div id="rt"><button>Lucky</button><button class="on">Rich</button><button>Charm</button><button>Room</button><button>Noble</button><button>Play</button><button>Recharge</button></div></div><div class="seg" id="rp"><button>Daily</button><button class="on">Weekly</button><button>Monthly</button></div><div id="rb"></div></section>
+ <section class="view" id="v-msg"><div class="hd"><div class="logo">💬</div><h1>Messages<small>Your conversations</small></h1></div><div id="ml"></div></section>
+ <section class="view" id="v-me"></section>
+</div>
+<div class="nav">
+ <button class="ni on" data-v="home"><span>🏠</span>Home</button>
+ <button class="ni" data-v="rank"><span>🏆</span>Rank</button>
+ <button class="plus" id="plus" aria-label="Room">🎙️</button>
+ <button class="ni" data-v="msg"><span>💬</span>Messages<em>2</em></button>
+ <button class="ni" data-v="me"><span>👤</span>Profile</button>
+</div>
+<div class="mini" id="mini"><button id="minib">🎙️</button><u id="minix">✕</u></div>
+<div class="thread" id="th"><div class="thh"><button id="thb">‹</button><span id="thn"></span></div><div class="tb" id="tb"></div><div class="tin"><input class="field" id="ti" placeholder="Type a message…" autocomplete="off"><button id="ts">➤</button></div></div>
+<div class="roomwrap" id="rw"><iframe id="rf" title="Voice room"></iframe></div>
+<div class="pfo" id="pfo"><button class="pfx" id="pfb">‹</button><div id="pfc"></div></div>
+<div class="rcp" id="rcp"></div>
+<div class="shb" id="shb"><div class="sh" id="sh"></div></div>
+<div class="toast" id="toast"></div>
+<div class="auth" id="au"></div>
+<div class="splash" id="sp"><img class="l3i" data-logo alt="Akira"><b style="font-size:20px;letter-spacing:.5px">Akira Voice Chat App</b></div>
+</div>
+
+<script src="src/bridge.js"></script>
+<script src="src/app.js"></script>
+<script src="src/viewport.js"></script>
+<script src="src/navigation.js"></script>
+<script type="module" src="src/native.js"></script>
+</body>
+</html>

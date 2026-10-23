@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voice Room Interior</title>
+<link rel="stylesheet" href="styles/room.css">
+<link rel="stylesheet" href="styles/viewport.css">
+</head>
+<body data-page="room">
+<div class="app" id="app" data-frame="grad">
+  <i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i>
+  <div class="top">
+    <button class="ib" id="exit" aria-label="Exit"><svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button>
+    <button class="ib" id="min" aria-label="Minimize"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+    <button class="room" id="roomBtn"><div class="rav" id="rav">🎙️</div><div class="rt"><b id="rname"></b><small><i class="live"></i>LIVE · ID <span id="rid">482915</span></small></div><span>⚙️</span></button>
+    <button class="ib" id="bOwn" aria-label="Owner"><span class="e3">👑</span></button>
+  </div>
+  <div class="stats"><span class="pill" id="ustat" style="cursor:pointer">👥 <i>128</i> ›</span><span class="pill">🏆 <i>2.4M</i></span><span class="pill" id="rrpill" style="cursor:pointer">💰 Reward</span><span class="pill" id="mstat"></span><span class="pill" id="cstat"></span><span class="pill" id="lstat"></span></div>
+  <div class="stage"><div class="host" id="host"></div><div class="grid" id="grid"></div></div>
+  <div class="chatw"><div class="chat" id="chat"></div><button class="newb" id="newb">↓ New message</button></div>
+  <div class="dock">
+    <div class="tray" id="tray"></div>
+    <div class="irow">
+      <div class="inp"><button id="emo" aria-label="Emoji">😊</button><input id="txt" placeholder="Type a message…" enterkeyhint="send" autocomplete="off"><button class="snd" id="sendTxt" aria-label="Send" style="display:none">➤</button><button id="imgBtn" class="imgb" aria-label="Photo">🖼️<i>🔒</i></button></div>
+      <button class="rb" id="bMsg" aria-label="Messages"><span class="e3">💬</span><em>3</em></button>
+      <button class="rb" id="bGift" aria-label="Gifts"><span class="e3">🎁</span></button>
+      <button class="rb" id="bGame" aria-label="Games"><span class="e3">🎮</span></button>
+      <button class="mic" id="mic" aria-label="Mute or unmute">🎤</button>
+    </div>
+  </div>
+  <div class="viewer" id="viewer"><img id="vimg" alt=""></div>
+  <div class="fx" id="fx"></div>
+  <div class="toast" id="toast"></div>
+  <div class="sheet-bg" id="bg"><div class="sheet" id="sheet"></div></div>
+</div>
+
+<script src="src/bridge.js"></script>
+<script src="src/room.js"></script>
+<script src="src/viewport.js"></script>
+</body>
+</html>

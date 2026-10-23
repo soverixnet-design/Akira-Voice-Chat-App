@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { listRooms, getRoom, getPool } from './database.mjs';
 import { register, login, authenticate, logout, profile } from './auth.mjs';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHmac } from 'node:crypto';
 import { createRoom, joinRoom, leaveRoom } from './rooms.mjs';
 import { pathToFileURL } from 'node:url';
 
@@ -54,6 +54,35 @@ export const requestHandler = async (req, res) => {
       return send(503,{error:'auth_unavailable'});
     }
   }
+  // Mint short-lived, room-scoped LiveKit credentials only for authenticated members.
+  const voiceMatch = url.pathname.match(/^\\/api\\/v1\\/rooms\\/(\\d{1,18})\\/voice-token$/);
+  if (req.method === 'POST' && voiceMatch) {
+    try {
+      const user = await authenticate(req.headers.authorization);
+      if (!user) return send(401,{error:'unauthorized'});
+      const key = process.env.AKIRA_LIVEKIT_API_KEY;
+      const secret = process.env.AKIRA_LIVEKIT_API_SECRET;
+      const wsUrl = process.env.AKIRA_LIVEKIT_URL;
+      if (!key || !secret || !/^wss:\\/\\//.test(wsUrl || '')) return send(503,{error:'voice_not_configured'});
+      const {rows} = await getPool().query(
+        'SELECT 1 FROM akira_room_members m JOIN akira_rooms r ON r.id=m.room_id WHERE r.public_id=$1 AND m.user_id=$2',
+        [voiceMatch[1],user.id]);
+      if (!rows.length) return send(403,{error:'join_room_first'});
+      const now = Math.floor(Date.now()/1000);
+      const encoded = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+      const header = encoded({alg:'HS256',typ:'JWT'});
+      const payload = encoded({
+        iss:key,sub:String(user.public_id),iat:now,nbf:now,exp:now+600,
+        name:user.display_name,video:{
+          room:'akira-'+voiceMatch[1],roomJoin:true,canPublish:true,canSubscribe:true,
+          canPublishData:true,canPublishSources:['microphone']
+        }
+      });
+      const body = header+'.'+payload;
+      const signature = createHmac('sha256',secret).update(body).digest('base64url');
+      return send(200,{app:appId,url:wsUrl,token:body+'.'+signature,expiresIn:600});
+    } catch(err) {console.error('voice_token_failed',err.message);return send(503,{error:'voice_unavailable'}); }
+  }
   if (url.pathname === '/api/v1/auth/me' && req.method === 'GET') {
     try {
       const user = await authenticate(req.headers.authorization);
@@ -97,8 +126,8 @@ export const requestHandler = async (req, res) => {
     return send(200, { ok: true, app: appId, service: 'api', startedAt });
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/status') {
-    return send(200, { app: appId, status: 'rooms-beta', productionReady: false,
-      enabled: ['health', 'status', 'database', 'room-read', 'room-create', 'room-join', 'room-leave', 'email-auth'], pending: ['voice', 'wallet', 'gifts', 'admin'] });
+    return send(200, { app: appId, status: 'voice-integration-beta', productionReady: false,
+      enabled: ['health', 'status', 'database', 'room-read', 'room-create', 'room-join', 'room-leave', 'email-auth', 'voice-token'], pending: ['voice-provider-configuration', 'wallet', 'gifts', 'admin'] });
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/rooms') {
     try { return send(200, { app: appId, rooms: await listRooms() }); }

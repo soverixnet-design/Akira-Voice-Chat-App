@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import { getPool } from './database.mjs';
 const scrypt = promisify(scryptCallback);
 const digest = token => createHash('sha256').update(token).digest('hex');
-const emailValid = email => typeof email === 'string' && email.length <= 254 && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);
+const emailValid = email => typeof email === 'string' && email.length <= 254 && /^[^ @]+@[^ @]+[.][^ @]+$/.test(email);
 const profile = row => ({ id: String(row.public_id), displayName: row.display_name, avatarUrl: row.avatar_url, countryCode: row.country_code });
 async function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');

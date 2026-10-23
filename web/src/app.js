@@ -315,14 +315,24 @@ var API={
   }catch(e){return{ok:false,msg:e.message||"Could not log in. Try again."}}
  }
 };
+async function loadAkiraRooms(){
+  if(!akiraToken())return;
+  try{
+    var data=await akiraRequest("/rooms","GET",undefined,akiraToken());
+    if(!Array.isArray(data.rooms))return;
+    CFG.rooms=data.rooms.map(function(r){return{id:String(r.id),name:r.name||"Room",emoji:"🎙️",c:"#9b4dff,#4c1d95",n:0,host:"Akira",tag:"Live",mics:[],th:"mid"}});
+    renderRooms();
+  }catch(e){console.warn("Akira rooms unavailable",e)}
+}
 var amode="login",apic=null;
 function showAuth(m){amode=m||"login";authRender();$("au").classList.add("on")}
 function hideAuth(){$("au").classList.remove("on")}
 function aerr(t){$("ae").textContent=t}
 function enter(a,msg){
+  var list=accts().filter(function(x){return x.key!==a.key});list.push(a);saveAccts(list);
   try{localStorage.setItem(SESS_K,a.key);localStorage.setItem("vr_state_v2",JSON.stringify(a.state||{}))}catch(e){}
   A=Object.assign({name:"Me",pic:null,myRoom:null,claim:{d:"",streak:0}},a.p);fixA();try{localStorage.setItem("vr_app_v1",JSON.stringify(A))}catch(e){}
-  hideAuth();refresh();renderRooms();go("home");toast(msg);
+  hideAuth();refresh();renderRooms();loadAkiraRooms();go("home");toast(msg);
 }
 function authRender(){
   $("au").classList.toggle("w",amode==="welcome");
@@ -400,13 +410,13 @@ function settingsSheet(){
   if($("su"))$("su").onclick=function(){closeSheet();showAuth("signup")};
 }
 function logout(){
-  syncAcct();try{localStorage.removeItem(SESS_K);localStorage.removeItem("vr_state_v2");localStorage.removeItem("vr_guest")}catch(e){}
+  syncAcct();var oldToken=akiraToken();if(oldToken)akiraRequest("/auth/logout","POST",undefined,oldToken).catch(function(){});try{localStorage.removeItem(AKIRA_TOKEN_KEY);localStorage.removeItem(SESS_K);localStorage.removeItem("vr_state_v2");localStorage.removeItem("vr_guest")}catch(e){}
   A={name:"Me",id:String(20000000+Math.floor(Math.random()*79999999)),pic:null,myRoom:null,claim:{d:"",streak:0}};
   try{localStorage.setItem("vr_app_v1",JSON.stringify(A))}catch(e){}
   fixA();closeSheet();leaveRoom();refresh();renderRooms();go("home");showAuth("welcome");
 }
 /* ===== Start ===== */
-renderRooms();refresh();
+renderRooms();refresh();loadAkiraRooms();
 document.querySelectorAll("img[data-logo]").forEach(function(i){i.src=BRAND.logo});
 try{if(!authed()&&!localStorage.getItem("vr_guest"))showAuth("welcome")}catch(e){}
 setTimeout(function(){$("sp").classList.add("off")},1300);

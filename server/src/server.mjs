@@ -1,5 +1,6 @@
 import http from 'node:http';
-import { listRooms, getRoom } from './database.mjs';
+import { listRooms, getRoom, getPool } from './database.mjs';
+import { register, login, authenticate, logout, profile } from './auth.mjs';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
@@ -29,18 +30,49 @@ export const requestHandler = async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       ...headers,
-      'access-control-allow-methods': 'GET, OPTIONS',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
       'access-control-allow-headers': 'content-type, authorization',
       'access-control-max-age': '600',
     });
     return res.end();
   }
+  if (req.method === 'POST' && ['/api/v1/auth/register','/api/v1/auth/login'].includes(url.pathname)) {
+    try {
+      let raw = '';
+      for await (const chunk of req) {
+        raw += chunk;
+        if (raw.length > 8192) return send(413,{error:'payload_too_large'});
+      }
+      let body;
+      try { body = JSON.parse(raw); } catch { return send(400,{error:'invalid_json'}); }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return send(400,{error:'invalid_json'});
+      const result = url.pathname.endsWith('/register') ? await register(body) : await login(body);
+      return send(result.status,result.body);
+    } catch(err) {
+      console.error('auth_failed',err.code || err.message);
+      return send(503,{error:'auth_unavailable'});
+    }
+  }
+  if (url.pathname === '/api/v1/auth/me' && req.method === 'GET') {
+    try {
+      const user = await authenticate(req.headers.authorization);
+      return user ? send(200,{app:appId,user:profile(user)}) : send(401,{error:'unauthorized'});
+    } catch(err) { console.error('auth_me_failed',err.message); return send(503,{error:'auth_unavailable'}); }
+  }
+  if (url.pathname === '/api/v1/auth/logout' && req.method === 'POST') {
+    try {
+      const user = await authenticate(req.headers.authorization);
+      if (!user) return send(401,{error:'unauthorized'});
+      await logout(req.headers.authorization);
+      return send(200,{ok:true,app:appId});
+    } catch(err) { console.error('logout_failed',err.message); return send(503,{error:'auth_unavailable'}); }
+  }
   if (req.method === 'GET' && url.pathname === '/health') {
     return send(200, { ok: true, app: appId, service: 'api', startedAt });
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/status') {
-    return send(200, { app: appId, status: 'foundation-only', productionReady: false,
-      enabled: ['health', 'status'], pending: ['auth', 'database', 'rooms', 'voice', 'wallet', 'gifts', 'admin'] });
+    return send(200, { app: appId, status: 'auth-beta', productionReady: false,
+      enabled: ['health', 'status', 'database', 'room-read', 'email-auth'], pending: ['room-create', 'room-join', 'voice', 'wallet', 'gifts', 'admin'] });
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/rooms') {
     try { return send(200, { app: appId, rooms: await listRooms() }); }

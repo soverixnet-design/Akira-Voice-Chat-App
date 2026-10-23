@@ -2,6 +2,7 @@ import http from 'node:http';
 import { listRooms, getRoom, getPool } from './database.mjs';
 import { register, login, authenticate, logout, profile } from './auth.mjs';
 import { randomUUID } from 'node:crypto';
+import { createRoom, joinRoom, leaveRoom } from './rooms.mjs';
 import { pathToFileURL } from 'node:url';
 
 const port = Number(process.env.PORT || 4301);
@@ -67,12 +68,37 @@ export const requestHandler = async (req, res) => {
       return send(200,{ok:true,app:appId});
     } catch(err) { console.error('logout_failed',err.message); return send(503,{error:'auth_unavailable'}); }
   }
+  const roomWrite = req.method === 'POST' && (url.pathname === '/api/v1/rooms' || /^\\/api\\/v1\\/rooms\\/\\d{1,18}\\/(join|leave)$/.test(url.pathname));
+  if (roomWrite) {
+    try {
+      const user = await authenticate(req.headers.authorization);
+      if (!user) return send(401,{error:'unauthorized',app:appId});
+      if (url.pathname === '/api/v1/rooms') {
+        let raw = '';
+        for await (const chunk of req) {
+          raw += chunk;
+          if (raw.length > 8192) return send(413,{error:'payload_too_large'});
+        }
+        let body;
+        try { body = JSON.parse(raw); } catch { return send(400,{error:'invalid_json'}); }
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return send(400,{error:'invalid_json'});
+        const result = await createRoom(user,body);
+        return send(result.status,result.body);
+      }
+      const match = url.pathname.match(/^\\/api\\/v1\\/rooms\\/(\\d{1,18})\\/(join|leave)$/);
+      const result = match[2] === 'join' ? await joinRoom(user,match[1]) : await leaveRoom(user,match[1]);
+      return send(result.status,result.body);
+    } catch(err) {
+      console.error('room_write_failed',err.code || err.message);
+      return send(503,{error:'room_unavailable',app:appId});
+    }
+  }
   if (req.method === 'GET' && url.pathname === '/health') {
     return send(200, { ok: true, app: appId, service: 'api', startedAt });
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/status') {
-    return send(200, { app: appId, status: 'auth-beta', productionReady: false,
-      enabled: ['health', 'status', 'database', 'room-read', 'email-auth'], pending: ['room-create', 'room-join', 'voice', 'wallet', 'gifts', 'admin'] });
+    return send(200, { app: appId, status: 'rooms-beta', productionReady: false,
+      enabled: ['health', 'status', 'database', 'room-read', 'room-create', 'room-join', 'room-leave', 'email-auth'], pending: ['voice', 'wallet', 'gifts', 'admin'] });
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/rooms') {
     try { return send(200, { app: appId, rooms: await listRooms() }); }

@@ -281,13 +281,14 @@ function validIdent(s){return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)||/^\+?\d{8,15
 function ageOf(y,m,d){var n=new Date(),a=n.getFullYear()-y;if(n.getMonth()<m||(n.getMonth()===m&&n.getDate()<d))a--;return a}
 async function hashPw(p,salt){try{var b=new TextEncoder().encode(salt+":"+p),d=await crypto.subtle.digest("SHA-256",b);return Array.from(new Uint8Array(d)).map(function(x){return x.toString(16).padStart(2,"0")}).join("")}catch(e){var h=5381,t=salt+p;for(var i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return"f"+h}}
 /* Akira-only HTTPS backend adapter. Visual presentation is unchanged. */
-var AKIRA_API_BASE="https://api.soverixnet.online/api/v1";
+var AKIRA_API_BASE=window.AKIRA_API_BASE||"";
 var AKIRA_TOKEN_KEY="akira_server_token_v1";
 function akiraToken(){try{return sessionStorage.getItem(AKIRA_TOKEN_KEY)||localStorage.getItem(AKIRA_TOKEN_KEY)||""}catch(e){return""}}
 async function akiraRequest(path,method,body,token){
   var options={method:method||"GET",headers:{"Accept":"application/json"}};
   if(body!==undefined){options.headers["Content-Type"]="application/json";options.body=JSON.stringify(body)}
   if(token)options.headers.Authorization="Bearer "+token;
+  if(!/^https:\/\//.test(AKIRA_API_BASE))throw new Error("Akira HTTPS API address is not configured");
   var response=await fetch(AKIRA_API_BASE+path,options);
   var data=await response.json().catch(function(){return{}});
   if(!response.ok)throw new Error(data.error||data.message||("Server error "+response.status));

@@ -16,6 +16,44 @@ try{var raw=localStorage.getItem("vr_state_v2");if(raw)Object.assign(S,JSON.pars
 function save(){try{localStorage.setItem("vr_state_v2",JSON.stringify(S))}catch(e){}}
 function level(){return 1+Math.floor(S.xp/1000)}
 function lockUI(){try{rrPill()}catch(e){}$("cstat").innerHTML="🪙 <i>"+bn(S.coins)+"</i>";$("lstat").innerHTML="⭐ Lv<i>"+bn(level())+"</i>";$("imgBtn").classList.toggle("locked",level()<S.minLv);if($("ustat"))$("ustat").innerHTML="👥 <i>"+bn(total())+"</i> ›"}
+/* LiveKit voice session: existing visual room layout remains unchanged.
+   Production requires a configured LiveKit endpoint and bundled client library. */
+var akiraVoiceRoom=null,akiraVoiceReady=false,akiraVoiceConnecting=false;
+async function akiraStartVoice(){
+  if(akiraVoiceConnecting||akiraVoiceRoom)return;
+  var ctx=AkiraBridge.getContext()||{};
+  if(!ctx.voiceAuth||!ctx.voiceApi||!ctx.id)return;
+  akiraVoiceConnecting=true;
+  try{
+    if(!window.LivekitClient||!window.LivekitClient.Room)throw Error("Voice SDK unavailable");
+    var res=await fetch(ctx.voiceApi+"/rooms/"+encodeURIComponent(ctx.id)+"/voice-token",{
+      method:"POST",headers:{"Authorization":"Bearer "+ctx.voiceAuth,"Accept":"application/json"}
+    });
+    var data=await res.json();
+    if(!res.ok)throw Error(data.error||"Voice server unavailable");
+    var room=new window.LivekitClient.Room({adaptiveStream:true,dynacast:true});
+    room.on(window.LivekitClient.RoomEvent.TrackSubscribed,function(track){
+      if(track.kind==="audio"){var element=track.attach();element.dataset.akiraVoice="1";document.body.appendChild(element)}
+    });
+    room.on(window.LivekitClient.RoomEvent.TrackUnsubscribed,function(track){track.detach().forEach(function(el){el.remove()})});
+    room.on(window.LivekitClient.RoomEvent.Disconnected,function(){
+      akiraVoiceReady=false;akiraVoiceRoom=null;
+      document.querySelectorAll("[data-akira-voice]").forEach(function(el){el.remove()});
+    });
+    await room.connect(data.url,data.token);
+    akiraVoiceRoom=room;
+    await room.localParticipant.setMicrophoneEnabled(!myMute);
+    akiraVoiceReady=true;
+    toast("Live voice connected");
+  }catch(err){toast("Voice: "+(err.message||"connection failed"))}
+  finally{akiraVoiceConnecting=false}
+}
+function akiraStopVoice(){
+  if(akiraVoiceRoom){akiraVoiceRoom.disconnect();akiraVoiceRoom=null}
+  akiraVoiceReady=false;
+  document.querySelectorAll("[data-akira-voice]").forEach(function(el){el.remove()});
+}
+window.addEventListener("pagehide",akiraStopVoice);
 var seats=[],myMute=false,chatOff=false,muteAll=false,rec=[1],qty=1,gsel=0;
 var base=[{n:"You",e:"😎"},{n:"Rafi",e:"🧑‍🎤"},{n:"Nusrat",e:"👩‍🦰"},{n:"Sakib",e:"🧔"},{n:"Mim",e:"👧"},{n:"Tanvir",e:"🧑‍💻"},{n:"Faria",e:"👩‍🎓"}];
 for(var q=0;q<S.n;q++){seats.push(base[q]?Object.assign({},base[q]):{empty:1})}
@@ -232,7 +270,7 @@ function msgSheet(){open('<h3>💬 Messages</h3><div class="row"><div>🧑‍�
 $("roomBtn").onclick=settings;$("rrpill").onclick=rewardSheet;setInterval(botGift,28000);rrPill();$("bGift").onclick=giftSheet;$("bGame").onclick=gameSheet;$("bMsg").onclick=msgSheet;$("bOwn").onclick=ownSheet;
 $("exit").onclick=function(){open('<h3>Leave the room?</h3><div class="acts" style="grid-template-columns:1fr 1fr"><button class="act" id="y1"><span>🚪</span>Leave</button><button class="act" id="n1"><span>↩️</span>Stay</button></div>');$("y1").onclick=function(){AkiraBridge.toApp({t:"exit"})};$("n1").onclick=close};
 $("min").onclick=function(){AkiraBridge.toApp({t:"min"})};
-$("mic").onclick=function(){myMute=!myMute;this.classList.toggle("off",myMute);this.textContent=myMute?"🔇":"🎤";seats[0].muted=myMute;render();toast(myMute?"Mic muted":"Mic on")};
+$("mic").onclick=function(){myMute=!myMute;this.classList.toggle("off",myMute);this.textContent=myMute?"🔇":"🎤";seats[0].muted=myMute;render();if(akiraVoiceRoom){akiraVoiceRoom.localParticipant.setMicrophoneEnabled(!myMute).catch(function(e){toast("Microphone permission needed")})}else if(!myMute){akiraStartVoice()}toast(myMute?"Mic muted":"Mic on")};
 var TALK=["Greetings to everyone 👋","Will sing tonight 🎶","How is everyone?","Awesome room! 🔥","Come to the mic, friend 😄","Good night everyone 🌙"];
 setInterval(function(){var o=others();if(!o.length||chatOff)return;var s=o[Math.floor(Math.random()*o.length)];msg(s.n,s.e,TALK[Math.floor(Math.random()*TALK.length)],{ci:s.i,lv:10+s.i*3})},9000);
 var ER=[["😂","Smile","pop"],["😍","Love","jump"],["😎","Cool","spin"],["🔥","Fire","jump"],["👏","Applause","shake"],["🎉","Party","spin"],["😭","Cry","shake"],["😡","Anger","shake"],["🥳","Festival","jump"],["😘","Kiss","pop"],["🤩","Wow!","spin"],["👍","Awesome","pop"],["🙏","Thanks","pop"],["💯","100","jump"],["😴","Sleep","shake"],["💖","Heart","pop"]];
@@ -307,7 +345,7 @@ $("imgBtn").onclick=sendImg;
 $("chat").onscroll=function(){if(this.scrollHeight-this.scrollTop-this.clientHeight<60)$("newb").style.display="none"};
 $("newb").onclick=function(){var c=$("chat");c.scrollTop=c.scrollHeight;this.style.display="none"};
 try{var W=AkiraBridge.getContext()||{};if(W.name){S.name=W.name;S.theme=W.theme||S.theme;S.pic=null;S.bg=null;window.__em=W.emoji;window.__minor=!!W.minor;if(W.id)$("rid").textContent=W.id}}catch(e){}
-applyTheme();render();setChat(true);updBtn();AkiraBridge.onRoom(function(d){if(d.t==="gift"){if(d.seat>0)rec=[d.seat];giftSheet()}});
+applyTheme();render();setChat(true);updBtn();akiraStartVoice();AkiraBridge.onRoom(function(d){if(d.t==="gift"){if(d.seat>0)rec=[d.seat];giftSheet()}});
 sys("📢 Welcome to the room! Please behave politely.");msg("Rafi","🧑‍🎤","Greetings to everyone 👋",{ci:1,lv:16});msg("Nusrat","👩‍🦰","Will sing tonight 🎶",{ci:2,lv:19});
 setInterval(function(){tick(false)},1600);
 

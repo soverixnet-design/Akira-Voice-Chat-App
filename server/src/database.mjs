@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { readFileSync } from 'node:fs';
 const { Pool } = pg;
 let pool;
 export function getPool() {
@@ -9,7 +10,7 @@ export function getPool() {
       port: Number(process.env.PGPORT || 5432),
       user: process.env.DATABASE_URL ? undefined : process.env.PGUSER,
       database: process.env.DATABASE_URL ? undefined : process.env.PGDATABASE,
-      password: process.env.DATABASE_URL ? undefined : process.env.PGPASSWORD,
+      password: process.env.DATABASE_URL ? undefined : (process.env.PGPASSWORD_FILE ? readFileSync(process.env.PGPASSWORD_FILE, 'utf8').trim() : process.env.PGPASSWORD),
       max: 3, connectionTimeoutMillis: 3000, idleTimeoutMillis: 10000 });
   }
   return pool;

@@ -265,7 +265,7 @@ function land(el,tx,ty,o,idx,val){
 function gameSheet(){
   var L=[["🎲","Ludo"],["🎯","Carrom"],["🎡","Food Wheel"],["🎰","Slot"],["🃏","Card"],["⭕","Tic-Tac"],["🧠","Memory"],["🎁","Lucky Spin"]];
   open('<h3>🎮 Games</h3><div class="gifts">'+L.map(function(g){return'<div class="gf" style="color:#fff"><span>'+g[0]+'</span>'+g[1]+'</div>'}).join("")+'</div>');
-  $("sheet").querySelectorAll(".gf").forEach(function(b){b.onclick=function(){var t=b.textContent;close();if(window.__minor&&/Food|Slot|Spin|Card/.test(t)){toast("This game is closed for users under 18");return}toast(t+" Loading…")}})
+  $("sheet").querySelectorAll(".gf").forEach(function(b){b.onclick=function(){var t=b.textContent;close();if(/Food Wheel/.test(t)){window.location.href="food-wheel/index.html?demo=offline&lang=en&sound=0";return}if(window.__minor&&/Slot|Spin|Card/.test(t)){toast("This game is closed for users under 18");return}toast(t+" Coming soon")}})
 }
 function msgSheet(){open('<h3>💬 Messages</h3><div class="row"><div>🧑‍🎤 Rafi<small>Coming tonight?</small></div><small>2m</small></div><div class="row"><div>👩‍🦰 Nusrat<small>Thanks for the gift 💜</small></div><small>10m</small></div><div class="row"><div>🎧 Customer service<small>Your request has been received</small></div><small>1h</small></div>')}
 $("roomBtn").onclick=settings;$("rrpill").onclick=rewardSheet;rrPill();$("bGift").onclick=giftSheet;$("bGame").onclick=gameSheet;$("bMsg").onclick=msgSheet;$("bOwn").onclick=ownSheet;

@@ -1,5 +1,6 @@
 import { getWallet, walletHistory } from './wallet.mjs';
 import { placeGameBet } from './game-bets.mjs';
+import { startGameEngine } from './game-engine.mjs';
 import { profileRoutes } from './profiles.mjs';
 import { requireAdmin, adminStats } from './admin.mjs';
 import http from 'node:http';
@@ -87,6 +88,17 @@ export const requestHandler = async (req, res) => {
         todayWinnings24h:Number(winnings.rows[0].total),recentBets:recent.rows,
         bettingEnabled:false});
     } catch(err) {console.error('game_overview_failed',err.message);return send(503,{error:'games_unavailable'}); }
+  }
+  const roundMatch=url.pathname.match(/^\/api\/v1\/games\/(food-wheel|jackpot-fruit)\/round$/);
+  if(req.method==='GET' && roundMatch){
+    try{
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      const game=roundMatch[1],table=game==='food-wheel'?'akira_food_rounds':'akira_jackpot_rounds';
+      const resultCol=game==='food-wheel'?'result_id':'result_item';
+      const {rows}=await getPool().query(`SELECT id::text,starts_at AS "startsAt",betting_ends_at AS "endsAt",settled_at AS "settledAt",${resultCol} AS result FROM ${table} ORDER BY id DESC LIMIT 1`);
+      return send(200,{game,round:rows[0]||null,serverTime:new Date().toISOString(),bettingEnabled:process.env.AKIRA_GAME_ENGINE_ENABLED==='true'});
+    }catch(err){console.error('round_read_failed',err.message);return send(503,{error:'round_unavailable'});}
   }
   const betMatch = url.pathname.match(/^\/api\/v1\/games\/(food-wheel|jackpot-fruit)\/bets$/);
   if (req.method === 'POST' && betMatch) {
@@ -342,5 +354,5 @@ export const requestHandler = async (req, res) => {
 };
 export const server = http.createServer(requestHandler);
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  server.listen(port, host, () => console.log('Akira API listening on ' + host + ':' + port));
+  server.listen(port, host, () => {console.log('Akira API listening on ' + host + ':' + port);startGameEngine();});
 }

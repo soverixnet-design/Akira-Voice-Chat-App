@@ -66,6 +66,27 @@ export const requestHandler = async (req, res) => {
       return send(200,{app:appId,wallet:await getWallet(user.id)});
     } catch(err) { console.error('wallet_read_failed',err.message);return send(503,{error:'wallet_unavailable'}); }
   }
+  // Shared wallet snapshot for both games; no client-controlled credits or outcomes.
+  if (req.method === 'GET' && url.pathname === '/api/v1/games/overview') {
+    try {
+      const user = await authenticate(req.headers.authorization);
+      if (!user) return send(401,{error:'unauthorized'});
+      const pool = getPool();
+      const [wallet, recent, winnings] = await Promise.all([
+        getWallet(user.id),
+        pool.query(`SELECT 'food-wheel' AS game,round_id,amount,payout,created_at FROM akira_food_bets WHERE user_id=$1
+          UNION ALL SELECT 'jackpot-fruit' AS game,round_id,amount,payout,created_at FROM akira_jackpot_bets WHERE user_id=$1
+          ORDER BY created_at DESC LIMIT 30`,[user.id]),
+        pool.query(`SELECT COALESCE(SUM(payout),0)::text AS total FROM (
+          SELECT payout FROM akira_food_bets WHERE user_id=$1 AND created_at>=now()-interval '24 hours'
+          UNION ALL SELECT payout FROM akira_jackpot_bets WHERE user_id=$1 AND created_at>=now()-interval '24 hours'
+        ) AS wins`,[user.id])
+      ]);
+      return send(200,{app:appId,wallet,games:['food-wheel','jackpot-fruit'],
+        todayWinnings24h:Number(winnings.rows[0].total),recentBets:recent.rows,
+        bettingEnabled:false});
+    } catch(err) {console.error('game_overview_failed',err.message);return send(503,{error:'games_unavailable'}); }
+  }
   if (await profileRoutes(req, url.pathname, send, authenticate, getPool)) return;
   // Mint short-lived, room-scoped LiveKit credentials only for authenticated members.
   const voiceMatch = url.pathname.match(/^\/api\/v1\/rooms\/(\d{1,18})\/voice-token$/);

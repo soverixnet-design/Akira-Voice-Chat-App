@@ -36,6 +36,16 @@
 </div>
 <pre id="akiraSearchResult" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
 </section>
+<section class="card" id="akiraRolesPanel" style="display:none">
+<h2>Admin Roles</h2><p>Super admin only. Assign admin, manager or moderator access.</p>
+<input id="akiraRoleId" inputmode="numeric" maxlength="6" placeholder="6-digit User ID">
+<select id="akiraRoleChoice" style="width:100%;padding:14px;background:#29334f;color:white;border:0;border-radius:10px;margin:8px 0">
+<option value="moderator">Moderator</option><option value="manager">Manager</option><option value="admin">Admin</option><option value="remove">Remove admin access</option>
+</select>
+<button id="akiraRoleSave" type="button">Save Role</button>
+<button id="akiraRoleRefresh" type="button" style="margin-top:10px">Show Roles &amp; Audit</button>
+<pre id="akiraRoleResult" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+</section>
 <script>
 document.getElementById('akiraSearchBtn').onclick=async()=>{
  const id=document.getElementById('akiraSearchId').value.trim();
@@ -97,6 +107,7 @@ document.getElementById('loginForm').addEventListener('submit',async event=>{
   document.getElementById('login').style.display='none';
   document.getElementById('dashboard').style.display='block';
   document.getElementById('akiraUserSearch').style.display='block';
+  document.getElementById('akiraRolesPanel').style.display=data.role==='super_admin'?'block':'none';
   msg.textContent='';
  }catch(error){msg.textContent=error.message;document.getElementById('password').value='';}
 });
@@ -105,6 +116,7 @@ document.getElementById('logout').onclick=async()=>{
  activeToken=null;
  document.getElementById('dashboard').style.display='none';
  document.getElementById('akiraUserSearch').style.display='none';
+ document.getElementById('akiraRolesPanel').style.display='none';
  document.getElementById('login').style.display='block';
  if(token)await fetch(api+'/api/v1/auth/logout',{method:'POST',headers:{Authorization:'Bearer '+token}}).catch(()=>{});
 };
@@ -157,4 +169,27 @@ async function akiraSetBan(banned){
 }
 document.getElementById('akiraBanBtn').onclick=()=>akiraSetBan(true);
 document.getElementById('akiraUnbanBtn').onclick=()=>akiraSetBan(false);
+
+document.getElementById('akiraRoleSave').onclick=async()=>{
+ const id=document.getElementById('akiraRoleId').value.trim();
+ const role=document.getElementById('akiraRoleChoice').value;
+ const out=document.getElementById('akiraRoleResult');
+ if(!/^\d{6}$/.test(id)){out.textContent='Enter a valid 6-digit User ID';return;}
+ if(!confirm('Set role '+role+' for user '+id+'?'))return;
+ try{
+  const r=await akiraFetch('/api/v1/admin/roles',{method:'POST',headers:{Authorization:'Bearer '+activeToken,'Content-Type':'application/json'},body:JSON.stringify({publicId:id,role})});
+  const d=await r.json();if(!r.ok)throw Error(d.error||'Update failed');
+  out.textContent='Role saved: '+id+' → '+role;
+ }catch(e){out.textContent='Error: '+e.message;}
+};
+document.getElementById('akiraRoleRefresh').onclick=async()=>{
+ const out=document.getElementById('akiraRoleResult');out.textContent='Loading...';
+ try{
+  const headers={Authorization:'Bearer '+activeToken};
+  const [rr,ar]=await Promise.all([akiraFetch('/api/v1/admin/roles',{headers}),akiraFetch('/api/v1/admin/audit',{headers})]);
+  const roles=await rr.json(),audit=await ar.json();
+  if(!rr.ok||!ar.ok)throw Error(roles.error||audit.error||'Request failed');
+  out.textContent='ROLES\n'+(roles.roles||[]).map(x=>x.public_id+' '+x.display_name+' — '+x.role).join('\n')+'\n\nRECENT AUDIT\n'+(audit.events||[]).map(x=>x.created_at+' '+x.action+' '+x.target_id).join('\n');
+ }catch(e){out.textContent='Error: '+e.message;}
+};
 </script></body></html>

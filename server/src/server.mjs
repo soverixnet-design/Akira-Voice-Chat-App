@@ -235,6 +235,61 @@ export const requestHandler = async (req, res) => {
       return send(503,{error:'admin_ban_unavailable'});
     }
   }
+  if (req.method === 'GET' && url.pathname === '/api/v1/admin/roles') {
+    try {
+      const admin = await requireAdmin(req.headers.authorization);
+      if (admin.error) return send(admin.status,{error:admin.error});
+      if (admin.role !== 'super_admin') return send(403,{error:'super_admin_required'});
+      const {rows} = await getPool().query(
+        'SELECT u.public_id,u.display_name,r.role,r.granted_at FROM akira_admin_roles r JOIN akira_users u ON u.id=r.user_id ORDER BY r.granted_at DESC LIMIT 100'
+      );
+      return send(200,{roles:rows});
+    } catch(err) { console.error('admin_roles_list_failed',err.message); return send(503,{error:'admin_unavailable'}); }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/v1/admin/roles') {
+    try {
+      const admin = await requireAdmin(req.headers.authorization);
+      if (admin.error) return send(admin.status,{error:admin.error});
+      if (admin.role !== 'super_admin') return send(403,{error:'super_admin_required'});
+      let raw='';
+      for await (const chunk of req) {
+        raw += chunk;
+        if (raw.length > 4096) return send(413,{error:'request_too_large'});
+      }
+      let body;
+      try { body=JSON.parse(raw); } catch { return send(400,{error:'invalid_json'}); }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return send(400,{error:'invalid_request'});
+      const id=String(body.publicId ?? '');
+      const role=body.role;
+      if (!/^\d{6}$/.test(id) || !['admin','manager','moderator','remove'].includes(role))
+        return send(400,{error:'invalid_role_or_user_id'});
+      const client=await getPool().connect();
+      try {
+        await client.query('BEGIN');
+        const target=await client.query('SELECT id FROM akira_users WHERE public_id=$1 FOR UPDATE',[id]);
+        if (!target.rows.length) {await client.query('ROLLBACK');return send(404,{error:'user_not_found'});}
+        const uid=target.rows[0].id;
+        const existing=await client.query('SELECT role FROM akira_admin_roles WHERE user_id=$1 FOR UPDATE',[uid]);
+        if (String(uid)===String(admin.user.id) || existing.rows[0]?.role==='super_admin') {
+          await client.query('ROLLBACK');return send(403,{error:'protected_super_admin'});
+        }
+        if (role==='remove') await client.query('DELETE FROM akira_admin_roles WHERE user_id=$1',[uid]);
+        else await client.query('INSERT INTO akira_admin_roles(user_id,role) VALUES($1,$2) ON CONFLICT(user_id) DO UPDATE SET role=EXCLUDED.role,granted_at=NOW()',[uid,role]);
+        await client.query('INSERT INTO akira_admin_audit(actor_user_id,action,target_type,target_id) VALUES($1,$2,$3,$4)',[admin.user.id,role==='remove'?'role_removed':'role_set_'+role,'user',id]);
+        await client.query('COMMIT');
+        return send(200,{ok:true,publicId:id,role});
+      } catch(err) {await client.query('ROLLBACK');throw err;} finally {client.release();}
+    } catch(err) {console.error('admin_role_update_failed',err.message);return send(503,{error:'admin_unavailable'});}
+  }
+  if (req.method === 'GET' && url.pathname === '/api/v1/admin/audit') {
+    try {
+      const admin=await requireAdmin(req.headers.authorization);
+      if (admin.error) return send(admin.status,{error:admin.error});
+      if (admin.role !== 'super_admin') return send(403,{error:'super_admin_required'});
+      const {rows}=await getPool().query('SELECT a.action,a.target_type,a.target_id,a.created_at,u.public_id AS actor_public_id FROM akira_admin_audit a LEFT JOIN akira_users u ON u.id=a.actor_user_id ORDER BY a.created_at DESC LIMIT 50');
+      return send(200,{events:rows});
+    } catch(err) {console.error('admin_audit_failed',err.message);return send(503,{error:'admin_unavailable'});}
+  }
   return send(404, { error: 'not_found', app: appId });
 };
 export const server = http.createServer(requestHandler);

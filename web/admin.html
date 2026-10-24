@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Akira Admin Panel</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#0b1020;color:#fff}.wrap{max-width:900px;margin:auto;padding:24px}header{padding:20px 0;border-bottom:1px solid #303852}h1{color:#b7a4ff}.card{background:#19223b;border:1px solid #343e61;border-radius:18px;padding:22px;margin:15px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}input,button{padding:14px;border-radius:10px;border:0;font-size:15px}input{width:100%;background:#29334f;color:#fff;margin:8px 0}button{background:#8065e9;color:white;cursor:pointer;width:100%}.num{font-size:34px;font-weight:bold;color:#80e7d0}small{color:#aeb9d4}#dashboard{display:none}
+</style>
+</head>
+<body><div class="wrap"><header><h1>✦ Akira Admin Panel</h1><small>Secure Administration Dashboard</small></header>
+<section class="card" id="login">
+<h2>Admin Login</h2>
+<p>Sign in with your Akira account.</p>
+<form id="loginForm">
+<input id="email" type="email" placeholder="Email address" autocomplete="username" required>
+<input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
+<button type="submit">Sign In</button>
+</form>
+<p id="message" role="status"></p>
+</section>
+<section id="dashboard"><h2>Dashboard</h2><p id="role"></p><div class="grid"><div class="card"><small>Total Users</small><div class="num" id="users">—</div></div><div class="card"><small>Total Rooms</small><div class="num" id="rooms">—</div></div></div><button id="logout">Close Dashboard</button></section>
+</div><section class="card" id="akiraUserSearch" style="display:none">
+<h2>User Management</h2>
+<input id="akiraSearchId" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit User ID">
+<button type="button" id="akiraSearchBtn">Search User</button>
+<button type="button" id="akiraAllUsersBtn" style="margin-top:12px">Show All Users</button>
+<div id="akiraAllUsersResult" style="margin-top:12px;overflow-wrap:anywhere"></div>
+<div style="margin-top:18px">
+<h3>User Ban Management</h3>
+<input id="akiraBanId" inputmode="numeric" maxlength="6" placeholder="6-digit User ID">
+<div style="display:flex;gap:10px;margin-top:10px">
+<button type="button" id="akiraBanBtn" style="background:#dc3545">Ban</button>
+<button type="button" id="akiraUnbanBtn" style="background:#198754">Unban</button>
+</div>
+<p id="akiraBanResult" aria-live="polite"></p>
+</div>
+<pre id="akiraSearchResult" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+</section>
+<script>
+document.getElementById('akiraSearchBtn').onclick=async()=>{
+ const id=document.getElementById('akiraSearchId').value.trim();
+ const out=document.getElementById('akiraSearchResult');
+ if(!/^\d{6}$/.test(id)){out.textContent='Enter a valid 6-digit User ID';return;}
+ out.textContent='Searching...';
+ try{
+  const r=await fetch('/api/v1/admin/users/search?id='+encodeURIComponent(id),{
+   headers:{Authorization:'Bearer '+activeToken},
+   signal:AbortSignal.timeout(15000)
+  });
+  const d=await r.json();
+  if(!r.ok)throw Error(d.error||'Search failed');
+  out.textContent=d.user?JSON.stringify(d.user,null,2):'User not found';
+ }catch(e){out.textContent=e.message;}
+};
+
+const api='https://api.soverixnet.online';
+let activeToken=null;
+async function akiraFetch(url, options={}) {
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),15000);
+ try {
+  return await fetch(url,{...options,signal:controller.signal});
+ } catch(error) {
+  if(error.name==='AbortError') throw Error('Server request timed out after 15 seconds');
+  throw error;
+ } finally {
+  clearTimeout(timer);
+ }
+}
+document.getElementById('loginForm').addEventListener('submit',async event=>{
+ event.preventDefault();
+ const msg=document.getElementById('message');
+ msg.textContent='Signing in...';
+ const email=document.getElementById('email').value.trim();
+ const password=document.getElementById('password').value;
+ try{
+  const loginResponse=await akiraFetch(api+'/api/v1/auth/login',{
+   method:'POST',headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({email,password})
+  });
+  const loginData=await loginResponse.json();
+  if(!loginResponse.ok || !loginData.token)throw Error('Login failed (HTTP '+loginResponse.status+'): '+(loginData.error||'No token returned'));
+  const token=loginData.token;
+  const adminResponse=await akiraFetch(api+'/api/v1/admin/dashboard',{
+   headers:{Authorization:'Bearer '+token}
+  });
+  const data=await adminResponse.json();
+  if(!adminResponse.ok){
+   await fetch(api+'/api/v1/auth/logout',{method:'POST',headers:{Authorization:'Bearer '+token}}).catch(()=>{});
+   throw Error(adminResponse.status===403?'This account is not an admin':'Admin access denied');
+  }
+  activeToken=token;
+  document.getElementById('users').textContent=data.stats.users;
+  document.getElementById('rooms').textContent=data.stats.rooms;
+  document.getElementById('role').textContent='Role: '+data.role;
+  document.getElementById('password').value='';
+  document.getElementById('login').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('akiraUserSearch').style.display='block';
+  msg.textContent='';
+ }catch(error){msg.textContent=error.message;document.getElementById('password').value='';}
+});
+document.getElementById('logout').onclick=async()=>{
+ const token=activeToken;
+ activeToken=null;
+ document.getElementById('dashboard').style.display='none';
+ document.getElementById('akiraUserSearch').style.display='none';
+ document.getElementById('login').style.display='block';
+ if(token)await fetch(api+'/api/v1/auth/logout',{method:'POST',headers:{Authorization:'Bearer '+token}}).catch(()=>{});
+};
+
+document.getElementById('akiraAllUsersBtn').onclick=async()=>{
+ const out=document.getElementById('akiraAllUsersResult');
+ out.textContent='Loading users...';
+ try{
+  const r=await fetch('/api/v1/admin/users',{
+   headers:{Authorization:'Bearer '+activeToken},
+   signal:AbortSignal.timeout(15000)
+  });
+  const d=await r.json();
+  if(!r.ok)throw Error(d.error||'Failed to load users');
+  out.replaceChildren();
+  for(const u of d.users||[]){
+   const card=document.createElement('div');
+   card.style.cssText='padding:12px;margin:8px 0;border:1px solid #555;border-radius:12px';
+   card.textContent='ID: '+u.public_id+' | '+(u.display_name||'Unnamed')+' | '+(u.country_code||'No country');
+   out.appendChild(card);
+  }
+  if(!d.users?.length)out.textContent='No users found';
+ }catch(e){out.textContent=e.message;}
+};
+
+async function akiraSetBan(banned){
+ const id=document.getElementById('akiraBanId').value.trim();
+ const out=document.getElementById('akiraBanResult');
+ if(!/^\d{6}$/.test(id)){
+  out.textContent='Enter a valid 6-digit User ID';
+  return;
+ }
+ const action=banned?'BAN':'UNBAN';
+ if(!confirm(action+' user '+id+'?'))return;
+ out.textContent='Processing...';
+ try{
+  const r=await fetch('/api/v1/admin/users/ban',{
+   method:'POST',
+   headers:{
+    'Content-Type':'application/json',
+    Authorization:'Bearer '+activeToken
+   },
+   body:JSON.stringify({publicId:id,banned}),
+   signal:AbortSignal.timeout(15000)
+  });
+  const d=await r.json();
+  if(!r.ok)throw Error(d.error||'Request failed');
+  out.textContent='User '+id+(banned?' banned':' unbanned')+' successfully';
+ }catch(e){out.textContent='Error: '+e.message;}
+}
+document.getElementById('akiraBanBtn').onclick=()=>akiraSetBan(true);
+document.getElementById('akiraUnbanBtn').onclick=()=>akiraSetBan(false);
+</script></body></html>

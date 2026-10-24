@@ -1,3 +1,5 @@
+import { profileRoutes } from './profiles.mjs';
+import { requireAdmin, adminStats } from './admin.mjs';
 import http from 'node:http';
 import { listRooms, getRoom, getPool } from './database.mjs';
 import { register, login, authenticate, logout, profile } from './auth.mjs';
@@ -13,6 +15,7 @@ const allowedOrigins = new Set((process.env.AKIRA_ALLOWED_ORIGINS || '').split('
 
 export const requestHandler = async (req, res) => {
   const url = new URL(req.url || '/', 'http://localhost');
+  if (/^\/rooms\/\d{1,18}\/voice-token$/.test(url.pathname)) url.pathname = '/api/v1' + url.pathname;
   const origin = req.headers.origin;
   const originAllowed = Boolean(origin && allowedOrigins.has(origin));
   const headers = {
@@ -54,6 +57,7 @@ export const requestHandler = async (req, res) => {
       return send(503,{error:'auth_unavailable'});
     }
   }
+  if (await profileRoutes(req, url.pathname, send, authenticate, getPool)) return;
   // Mint short-lived, room-scoped LiveKit credentials only for authenticated members.
   const voiceMatch = url.pathname.match(/^\/api\/v1\/rooms\/(\d{1,18})\/voice-token$/);
   if (req.method === 'POST' && voiceMatch) {
@@ -137,6 +141,99 @@ export const requestHandler = async (req, res) => {
   if (req.method === 'GET' && roomMatch) {
     try { const room = await getRoom(roomMatch[1]); return room ? send(200, { app: appId, room }) : send(404, { error: 'room_not_found', app: appId }); }
     catch (err) { console.error('room_read_failed', err.message); return send(503, { error: 'database_unavailable', app: appId }); }
+  }
+  if (req.method === 'GET' && url.pathname === '/api/v1/admin/dashboard') {
+    try {
+      const admin = await requireAdmin(req.headers.authorization);
+      if (admin.error) return send(admin.status, {error:admin.error});
+      return send(200, {app:appId,role:admin.role,stats:await adminStats()});
+    } catch(err) {
+      console.error('admin_dashboard_failed',err.message);
+      return send(503,{error:'admin_unavailable'});
+    }
+  }
+  if (req.method === 'GET' && url.pathname === '/api/v1/admin/users/search') {
+    try {
+      const admin = await requireAdmin(req.headers.authorization);
+      if (admin.error) return send(admin.status, {error:admin.error});
+      const id = url.searchParams.get('id') || '';
+      if (!/^\d{6}$/.test(id)) return send(400, {error:'invalid_user_id'});
+      const {rows} = await getPool().query(
+        'SELECT id,public_id,display_name,country_code,avatar_url,created_at FROM akira_users WHERE public_id=$1',
+        [id]
+      );
+      return send(200, {user:rows[0] || null});
+    } catch(err) {
+      console.error('admin_user_search_failed',err.message);
+      return send(503,{error:'admin_unavailable'});
+    }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/v1/admin/users') {
+    try {
+      const admin = await requireAdmin(req.headers.authorization);
+      if (admin.error) return send(admin.status, {error:admin.error});
+      const {rows} = await getPool().query(
+        'SELECT public_id,display_name,country_code,avatar_url,created_at FROM akira_users ORDER BY id DESC LIMIT 100'
+      );
+      return send(200, {users:rows});
+    } catch(err) {
+      console.error('admin_users_failed',err.message);
+      return send(503,{error:'admin_unavailable'});
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/v1/admin/users/ban') {
+    try {
+      const admin = await requireAdmin(req.headers.authorization);
+      if (admin.error) return send(admin.status, {error:admin.error});
+      if (admin.role !== 'super_admin') return send(403,{error:'super_admin_required'});
+      let raw = '';
+      for await (const chunk of req) {
+        raw += chunk;
+        if (raw.length > 4096) return send(413,{error:'request_too_large'});
+      }
+      let body;
+      try { body = JSON.parse(raw); }
+      catch { return send(400,{error:'invalid_json'}); }
+      const id = String(body.publicId ?? '');
+      if (!/^\d{6}$/.test(id) || typeof body.banned !== 'boolean')
+        return send(400,{error:'invalid_request'});
+      const pool = getPool();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const target = await client.query(
+          'SELECT id FROM akira_users WHERE public_id=$1 FOR UPDATE',[id]
+        );
+        if (!target.rows.length) {
+          await client.query('ROLLBACK');
+          return send(404,{error:'user_not_found'});
+        }
+        const uid = target.rows[0].id;
+        const protectedRole = await client.query(
+          'SELECT 1 FROM akira_admin_roles WHERE user_id=$1',[uid]
+        );
+        if (String(uid) === String(admin.user.id) || protectedRole.rows.length) {
+          await client.query('ROLLBACK');
+          return send(403,{error:'protected_admin_account'});
+        }
+        await client.query('UPDATE akira_users SET is_banned=$1 WHERE id=$2',[body.banned,uid]);
+        if (body.banned) {
+          await client.query('DELETE FROM akira_sessions WHERE user_id=$1',[uid]);
+        }
+        await client.query('COMMIT');
+        return send(200,{ok:true,publicId:id,is_banned:body.banned});
+      } catch(err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    } catch(err) {
+      console.error('admin_ban_failed',err.message);
+      return send(503,{error:'admin_ban_unavailable'});
+    }
   }
   return send(404, { error: 'not_found', app: appId });
 };

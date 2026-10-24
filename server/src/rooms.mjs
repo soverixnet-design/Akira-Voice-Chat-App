@@ -10,6 +10,9 @@ export async function createRoom(user, body) {
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1::bigint)',[user.id]);
+    const existingRoom=await client.query('SELECT public_id FROM akira_rooms WHERE owner_id=$1 LIMIT 1',[user.id]);
+    if(existingRoom.rows.length){await client.query('ROLLBACK');return {status:409,body:{error:'already_has_room',roomId:String(existingRoom.rows[0].public_id)}};}
     const {rows} = await client.query(
       'INSERT INTO akira_rooms(owner_id,name,description,seat_count) VALUES($1,$2,$3,$4) RETURNING public_id',
       [user.id,name,description,seatCount]);

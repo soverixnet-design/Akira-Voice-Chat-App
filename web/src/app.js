@@ -80,9 +80,9 @@ var cur=null;
 async function openRoom(r){
   if(cur && cur.id===r.id){resumeRoom();return}
   if(!akiraToken()){showAuth("login");toast("Log in to enter a live room");return}
-  try{await akiraRequest("/rooms/"+encodeURIComponent(r.id)+"/join","POST",undefined,akiraToken())}catch(e){toast(e.message||"Cannot join room");return}
+  try{await akiraRequest("/api/v1/rooms/"+encodeURIComponent(r.id)+"/join","POST",undefined,akiraToken())}catch(e){toast(e.message||"Cannot join room");return}
   if(cur)leaveRoom();
-  AkiraBridge.setContext({name:r.name,emoji:r.emoji,theme:r.th,id:r.id,minor:!!A.minor,voiceAuth:akiraToken(),voiceApi:AKIRA_API_BASE});
+  AkiraBridge.setContext({name:r.name,emoji:r.emoji,theme:r.th,id:r.id,ownerId:r.ownerId||null,userId:String(A.id),minor:!!A.minor,voiceAuth:akiraToken(),voiceApi:AKIRA_API_BASE});
   cur=r;
   $("rf").src="room.html";
   resumeRoom();
@@ -96,7 +96,7 @@ function minimizeRoom(){
   $("rw").classList.remove("on");$("minib").textContent=cur.emoji;
   $("mini").classList.add("on");refresh();
 }
-function leaveRoom(){if(cur&&akiraToken())akiraRequest("/rooms/"+encodeURIComponent(cur.id)+"/leave","POST",undefined,akiraToken()).catch(function(e){console.warn("Room leave failed",e)});var rf=$("rf");rf.removeAttribute("srcdoc");rf.src="about:blank";$("rw").classList.remove("on");$("mini").classList.remove("on");cur=null;AkiraBridge.setContext(null);window.dispatchEvent(new Event("akira:room-change"));refresh()}
+function leaveRoom(){if(cur&&akiraToken())akiraRequest("/api/v1/rooms/"+encodeURIComponent(cur.id)+"/leave","POST",undefined,akiraToken()).catch(function(e){console.warn("Room leave failed",e)});var rf=$("rf");rf.removeAttribute("srcdoc");rf.src="about:blank";$("rw").classList.remove("on");$("mini").classList.remove("on");cur=null;AkiraBridge.setContext(null);window.dispatchEvent(new Event("akira:room-change"));refresh()}
 AkiraBridge.onApp(function(d){
   if(d.t==="exit")leaveRoom();
   if(d.t==="gift"){fixA();A.st.sent=(A.st.sent||0)+d.n;A.sw[d.g]=(A.sw[d.g]||0)+d.n;saveA()}
@@ -108,7 +108,7 @@ function createSheet(){
   var E=["🎙️","🎤","🎶","🌙","⚽","📖","🎮","🌍","💬","🔥","💎","🌸"],ch="🎙️";
   openSheet('<h3>🎙️ Create your own room</h3><div class="lbl">Room name</div><input class="field" id="cn" maxlength="24" placeholder="e.g. My Chat House"><div class="lbl" style="margin-top:12px">Room icon</div><div class="g4" id="ce">'+E.map(function(e,i){return'<button class="'+(i?"":"sel")+'"><span>'+e+'</span></button>'}).join("")+'</div><div class="lbl" style="margin-top:10px">Room ID = Your profile ID ('+A.id+')</div><button class="big" id="cm">Create room</button>');
   $("ce").querySelectorAll("button").forEach(function(b,i){b.onclick=function(){ch=E[i];$("ce").querySelectorAll("button").forEach(function(x){x.classList.remove("sel")});b.classList.add("sel")}});
-  $("cm").onclick=async function(){var n=$("cn").value.trim()||"My room";var T=["mid","rose","ocean","forest","gold","sunset"],C=["#9b4dff,#4c1d95","#ff3dc8,#9d174d","#0ea5e9,#075985","#10b981,#065f46","#f59e0b,#92400e","#a855f7,#581c87"],k=Math.floor(Math.random()*6);var created;try{created=await akiraRequest("/rooms","POST",{name:n},akiraToken())}catch(e){toast(e.message||"Room creation failed");return} A.myRoom={id:String(created.room.id),name:n,emoji:ch,th:T[k],c:C[k]};saveA();closeSheet();tab=2;$("tabs").querySelectorAll("button").forEach(function(x,i){x.classList.toggle("on",i===2)});renderRooms();toast("Room created ✓");openRoom(myR())};
+  $("cm").onclick=async function(){var n=$("cn").value.trim()||"My room";var T=["mid","rose","ocean","forest","gold","sunset"],C=["#9b4dff,#4c1d95","#ff3dc8,#9d174d","#0ea5e9,#075985","#10b981,#065f46","#f59e0b,#92400e","#a855f7,#581c87"],k=Math.floor(Math.random()*6);var created;try{created=await akiraRequest("/api/v1/rooms","POST",{name:n},akiraToken())}catch(e){toast(e.message||"Room creation failed");return} A.myRoom={id:String(created.room.id),name:n,emoji:ch,th:T[k],c:C[k]};saveA();closeSheet();tab=2;$("tabs").querySelectorAll("button").forEach(function(x,i){x.classList.toggle("on",i===2)});renderRooms();toast("Room created ✓");openRoom(myR())};
 }
 $("plus").onclick=function(){if(A.myRoom)openRoom(myR());else createSheet()};
 /* ===== Daily reward, recharge, invite ===== */
@@ -281,7 +281,7 @@ function validIdent(s){return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s)||/^\+?\d{8,15
 function ageOf(y,m,d){var n=new Date(),a=n.getFullYear()-y;if(n.getMonth()<m||(n.getMonth()===m&&n.getDate()<d))a--;return a}
 async function hashPw(p,salt){try{var b=new TextEncoder().encode(salt+":"+p),d=await crypto.subtle.digest("SHA-256",b);return Array.from(new Uint8Array(d)).map(function(x){return x.toString(16).padStart(2,"0")}).join("")}catch(e){var h=5381,t=salt+p;for(var i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return"f"+h}}
 /* Akira-only HTTPS backend adapter. Visual presentation is unchanged. */
-var AKIRA_API_BASE=window.AKIRA_API_BASE||"";
+var AKIRA_API_BASE=window.AKIRA_API_BASE||"https://api.soverixnet.online";
 var AKIRA_TOKEN_KEY="akira_server_token_v1";
 function akiraToken(){try{return sessionStorage.getItem(AKIRA_TOKEN_KEY)||localStorage.getItem(AKIRA_TOKEN_KEY)||""}catch(e){return""}}
 async function akiraRequest(path,method,body,token){
@@ -301,8 +301,8 @@ function akiraAccount(data,key,extra){
 var API={
  signup:async function(d){
   try{
-    if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(d.key))return{ok:false,msg:"Server registration currently requires an email address."};
-    var data=await akiraRequest("/auth/register","POST",{email:d.key,password:d.pw,displayName:d.name});
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.key))return{ok:false,msg:"Server registration currently requires an email address."};
+    var data=await akiraRequest("/api/v1/auth/register","POST",{email:d.key,password:d.pw,displayName:d.name});
     localStorage.setItem(AKIRA_TOKEN_KEY,data.token);
     return{ok:true,acct:akiraAccount(data,d.key,d)};
   }catch(e){return{ok:false,msg:e.message||"Could not register. Try again."}}
@@ -310,7 +310,7 @@ var API={
  login:async function(id,pw){
   try{
     if(!id.includes("@"))return{ok:false,msg:"Please log in with your registered email."};
-    var data=await akiraRequest("/auth/login","POST",{email:id,password:pw});
+    var data=await akiraRequest("/api/v1/auth/login","POST",{email:id,password:pw});
     localStorage.setItem(AKIRA_TOKEN_KEY,data.token);
     return{ok:true,acct:akiraAccount(data,id,{})};
   }catch(e){return{ok:false,msg:e.message||"Could not log in. Try again."}}
@@ -319,9 +319,9 @@ var API={
 async function loadAkiraRooms(){
   if(!akiraToken())return;
   try{
-    var data=await akiraRequest("/rooms","GET",undefined,akiraToken());
+    var data=await akiraRequest("/api/v1/rooms","GET",undefined,akiraToken());
     if(!Array.isArray(data.rooms))return;
-    CFG.rooms=data.rooms.map(function(r){return{id:String(r.id),name:r.name||"Room",emoji:"🎙️",c:"#9b4dff,#4c1d95",n:0,host:"Akira",tag:"Live",mics:[],th:"mid"}});
+    CFG.rooms=data.rooms.map(function(r){return{id:String(r.id),ownerId:r.ownerId==null?null:String(r.ownerId),name:r.name||"Room",emoji:"🎙️",c:"#9b4dff,#4c1d95",n:0,host:"Akira",tag:"Live",mics:[],th:"mid"}});
     renderRooms();
   }catch(e){console.warn("Akira rooms unavailable",e)}
 }
@@ -351,7 +351,7 @@ function authRender(){
     h+='<div class="apic" id="apic" style="'+(apic?"background-image:url("+apic+");border-style:solid":"")+'">'+(apic?"":"📷")+'</div><div class="lbl" style="text-align:center;margin-top:2px">Profile photo from gallery (optional)</div>';
     h+='<div class="lbl">Your name</div><input class="field" id="an" maxlength="20" placeholder="e.g. Shakil" autocomplete="name">';
     h+='<div class="lbl">Email or phone number</div><input class="field" id="aid" placeholder="name@email.com or +8801XXXXXXXXX" autocomplete="username">';
-    h+='<div class="lbl">Password (at least 6 characters)</div><div class="pw"><input class="field" id="apw" type="password" autocomplete="new-password"><button type="button" class="eye" id="eye">👁️</button></div>';
+    h+='<div class="lbl">Password (at least 12 characters)</div><div class="pw"><input class="field" id="apw" type="password" autocomplete="new-password"><button type="button" class="eye" id="eye">👁️</button></div>';
     h+='<div class="lbl">Re-enter password</div><input class="field" id="apw2" type="password" autocomplete="new-password">';
     h+='<div class="lbl">Country</div><select class="field" id="ac"><option value="">Select country</option>'+CTRY.map(function(c){return'<option>'+c[0]+" "+c[1]+'</option>'}).join("")+'</select>';
     h+='<div class="lbl">Date of birth (cannot be changed later)</div><div class="drow"><select class="field" id="ad"><option value="">Day</option>';for(i=1;i<=31;i++)h+='<option value="'+i+'">'+bn(i)+'</option>';
@@ -381,7 +381,7 @@ async function doSignup(){
   var name=$("an").value.trim(),key=norm($("aid").value),pw=$("apw").value,c=$("ac").value,dd=+$("ad").value,mm=$("am").value,yy=+$("ay").value;
   if(name.length<2)return aerr("Enter at least 2 characters for the name");
   if(!validIdent(key))return aerr("Enter a valid email or phone number");
-  if(pw.length<6)return aerr("Password must be at least 6 characters");
+  if(pw.length<6)return aerr("Password must be at least 12 characters");
   if(pw!==$("apw2").value)return aerr("Passwords do not match");
   if(!c)return aerr("Select country");
   if(!dd||mm===""||!yy)return aerr("Select day, month and year of birth");

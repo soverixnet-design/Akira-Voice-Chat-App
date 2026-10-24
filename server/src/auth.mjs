@@ -46,7 +46,7 @@ export async function register({email, password, displayName}) {
 }
 export async function login({email,password}) {
   if (!emailValid(email) || typeof password !== 'string') return {status:401,body:{error:'invalid_credentials'}};
-  const {rows} = await getPool().query('SELECT u.id,u.public_id,u.display_name,u.avatar_url,u.country_code,c.password_hash FROM akira_credentials c JOIN akira_users u ON u.id=c.user_id WHERE c.email=$1', [email.trim().toLowerCase()]);
+  const {rows} = await getPool().query('SELECT u.id,u.public_id,u.display_name,u.avatar_url,u.country_code,c.password_hash FROM akira_credentials c JOIN akira_users u ON u.id=c.user_id WHERE c.email=$1 AND u.is_banned=FALSE', [email.trim().toLowerCase()]);
   if (!rows[0] || !(await verifyPassword(password,rows[0].password_hash))) return {status:401,body:{error:'invalid_credentials'}};
   const token = await newSession(getPool(),rows[0].id);
   return {status:200,body:{app:'akira',token,user:profile(rows[0])}};
@@ -54,7 +54,7 @@ export async function login({email,password}) {
 export async function authenticate(header) {
   if (typeof header !== 'string' || !/^Bearer [A-Za-z0-9_-]{43}$/.test(header)) return null;
   const token = header.slice(7);
-  const {rows} = await getPool().query('SELECT u.id,u.public_id,u.display_name,u.avatar_url,u.country_code FROM akira_sessions s JOIN akira_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()', [digest(token)]);
+  const {rows} = await getPool().query('SELECT u.id,u.public_id,u.display_name,u.avatar_url,u.country_code FROM akira_sessions s JOIN akira_users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.is_banned=FALSE', [digest(token)]);
   return rows[0] || null;
 }
 export async function logout(header) {

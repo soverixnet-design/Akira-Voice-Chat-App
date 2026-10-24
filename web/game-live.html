@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Akira Live Games</title><style>
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#4b277d,#140c2d 70%);color:white;font:14px system-ui;padding:12px}header{display:flex;justify-content:space-between;align-items:center;gap:8px}.title{font-size:19px;font-weight:800}.wallet{background:#2b2053;padding:9px 12px;border-radius:15px;color:#ffd879}.status{padding:9px 0;color:#c9c0e7}.round{display:flex;justify-content:space-between;background:#231849;border-radius:14px;padding:11px;margin:7px 0 12px}.items{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.item{border:1px solid #7356b7;border-radius:14px;background:#32205e;color:white;min-height:70px;padding:8px 2px;font-size:12px}.item b{display:block;font-size:23px;margin-bottom:4px}.item small{color:#ffdf7b}.item:disabled{opacity:.45}.chips{display:flex;gap:6px;overflow:auto;margin:12px 0}.chip{border:1px solid #755da6;border-radius:24px;background:#241945;color:white;padding:9px 13px;white-space:nowrap}.chip.active{background:#ffb52e;color:#211335;font-weight:800}.note{font-size:12px;color:#d5c6fa;line-height:1.5}.result{background:#281a51;border-radius:12px;padding:10px;margin-top:10px}.error{color:#ffaaa8}.ok{color:#a5ffcc}button{cursor:pointer}button:disabled{cursor:not-allowed}@media(max-height:450px){.item{min-height:52px}.item b{font-size:17px}body{padding:7px}}
+</style></head><body>
+<header><div class="title" id="title">🎮 Akira Game</div><div class="wallet">🪙 <b id="balance">—</b></div></header>
+<div id="status" class="status">Connecting to Akira wallet…</div>
+<div class="round"><span>Round <b id="round">—</b></span><span>Betting <b id="timer">—</b></span></div>
+<div class="items" id="items"></div><div class="chips" id="chips"></div>
+<div class="note">Select a coin chip, then tap an item to place a real bet. Bets and winnings use your Akira server wallet. Results are determined by the server.</div>
+<div id="result" class="result" aria-live="polite">Waiting for the server round…</div>
+<script>
+(()=>{
+'use strict';
+const game=new URLSearchParams(location.search).get('game')==='jackpot-fruit'?'jackpot-fruit':'food-wheel';
+const catalog={
+'food-wheel':[['shrimp','🦐','Shrimp'],['fish','🐟','Fish'],['chicken','🍗','Chicken'],['steak','🥩','Steak'],['cabbage','🥬','Cabbage'],['carrot','🥕','Carrot'],['corn','🌽','Corn'],['tomato','🍅','Tomato']],
+'jackpot-fruit':[['lemon','🍋','Lemon'],['grape','🍇','Grape'],['kiwi','🥝','Kiwi'],['cherry','🍒','Cherry'],['peach','🍑','Peach'],['watermelon','🍉','Watermelon'],['banana','🍌','Banana'],['strawberry','🍓','Strawberry']]};
+const chips=[1000,10000,100000,1000000];let selected=1000,token='',round=null,balance=null,endsAt=0,enabled=false,pending=false,seenResult='';
+const $=id=>document.getElementById(id);
+const fmt=n=>Number(n).toLocaleString('en-US');
+$('title').textContent=game==='food-wheel'?'🎡 Food Wheel':'🎰 Jackpot Fruit';
+function status(s,error=false){$('status').textContent=s;$('status').className='status'+(error?' error':'')}
+function render(){ $('balance').textContent=balance===null?'—':fmt(balance);$('round').textContent=round?.id||'—';$('timer').textContent=round?Math.max(0,Math.ceil((endsAt-Date.now())/1000))+'s':'—';const canBet=!!token&&enabled&&round&&!round.settledAt&&Date.now()<endsAt&&!pending;document.querySelectorAll('.item').forEach(b=>b.disabled=!canBet||balance<selected);document.querySelectorAll('.chip').forEach(b=>b.classList.toggle('active',Number(b.dataset.amount)===selected))}
+$('items').innerHTML=catalog[game].map(([id,emoji,name])=>'<button class="item" data-item="'+id+'" disabled><b>'+emoji+'</b>'+name+'</button>').join('');
+$('chips').innerHTML=chips.map(n=>'<button class="chip" data-amount="'+n+'">'+fmt(n)+'</button>').join('');
+$('chips').addEventListener('click',e=>{const b=e.target.closest('[data-amount]');if(b){selected=Number(b.dataset.amount);render()}});
+async function api(path,method='GET',body){const r=await fetch('/api/v1'+path,{method,headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'HTTP '+r.status);return d}
+async function sync(){if(!token)return;try{const [o,r]=await Promise.all([api('/games/overview'),api('/games/'+game+'/round')]);balance=Number(o.wallet?.balance??o.wallet?.coins??0);round=r.round;enabled=!!r.bettingEnabled;endsAt=round?Date.parse(round.endsAt):0;status(enabled?'Connected to real Akira wallet':'Game betting is temporarily disabled');if(round?.settledAt){const key=round.id+':'+round.result;if(key!==seenResult){seenResult=key;$('result').textContent='Round '+round.id+' result: '+(round.result||'pending')+' • Wallet updated from server'}}else if(round){$('result').textContent='Betting open. Choose an item.'}render()}catch(e){enabled=false;status('Server: '+e.message,true);render()}}
+$('items').addEventListener('click',async e=>{const b=e.target.closest('[data-item]');if(!b||pending||!enabled||!round||Date.now()>=endsAt||balance<selected)return;pending=true;render();const id=b.dataset.item,amount=selected,roundId=round.id;try{const d=await api('/games/'+game+'/bets','POST',{roundId,itemId:id,amount,requestId:crypto.randomUUID()});balance=Number(d.balance);$('result').textContent='Bet accepted: '+id+' • '+fmt(amount)+' coins deducted';$('result').className='result ok';window.parent.postMessage({type:'akira:wallet-updated'},location.origin)}catch(err){$('result').textContent='Bet not accepted: '+err.message;$('result').className='result error'}finally{pending=false;await sync()}});
+window.addEventListener('message',e=>{if(e.origin!==location.origin||e.source!==window.parent||e.data?.type!=='akira:game-auth')return;token=String(e.data.token||'');if(!token){status('Log in to play with real coins',true);return}sync()});
+window.parent.postMessage({type:'akira:game-ready'},location.origin);
+setInterval(()=>{render()},500);
+setInterval(()=>{if(token&&!pending)sync()},4000);
+})();
+</script></body></html>

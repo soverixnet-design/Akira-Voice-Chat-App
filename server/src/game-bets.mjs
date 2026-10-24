@@ -1,5 +1,4 @@
 import { getPool } from './database.mjs';
-import { randomUUID } from 'node:crypto';
 
 // Game bets are accepted only by this authenticated server, never by client wallet deltas.
 // Each wager and wallet debit commit in one PostgreSQL transaction.
@@ -17,20 +16,30 @@ export async function placeGameBet(userId, game, body) {
   const client=await getPool().connect();
   try {
     await client.query('BEGIN');
-    // Wallet row lock serializes concurrent requests and idempotency checks per user.
+    // Check duplicates before round closure; idempotent retries remain safe.
+    const prior=await client.query(`SELECT round_id,item_id,amount FROM ${g.bets} WHERE user_id=$1 AND request_id=$2`,[userId,requestId]);
+    if(prior.rows.length){
+      const e=prior.rows[0];
+      const balance=await client.query('SELECT balance FROM akira_wallets WHERE user_id=$1',[userId]);
+      await client.query('COMMIT');
+      return String(e.round_id)===String(roundId)&&e.item_id===itemId&&Number(e.amount)===amount
+        ? {status:200,body:{ok:true,duplicate:true,balance:Number(balance.rows[0].balance)}}
+        : {status:409,body:{error:'request_id_conflict'}};
+    }
+    // Lock round before wallet: same lock order as the settlement engine.
+    const round=await client.query(`SELECT id FROM ${g.rounds} WHERE id=$1 AND starts_at<=now() AND betting_ends_at>now() AND settled_at IS NULL FOR UPDATE`,[roundId]);
+    if(!round.rows.length){await client.query('ROLLBACK');return {status:409,body:{error:'betting_closed'}};
+    }
     await client.query('INSERT INTO akira_wallets(user_id) VALUES($1) ON CONFLICT DO NOTHING',[userId]);
     const wallet=await client.query('SELECT balance FROM akira_wallets WHERE user_id=$1 FOR UPDATE',[userId]);
     const old=Number(wallet.rows[0].balance);
     const existing=await client.query(`SELECT round_id,item_id,amount FROM ${g.bets} WHERE user_id=$1 AND request_id=$2`,[userId,requestId]);
-    if(existing.rows.length) {
-      const e=existing.rows[0];
-      await client.query('COMMIT');
+    if(existing.rows.length){
+      const e=existing.rows[0];await client.query('COMMIT');
       return String(e.round_id)===String(roundId)&&e.item_id===itemId&&Number(e.amount)===amount
         ? {status:200,body:{ok:true,duplicate:true,balance:old}}
         : {status:409,body:{error:'request_id_conflict'}};
     }
-    const round=await client.query(`SELECT id FROM ${g.rounds} WHERE id=$1 AND starts_at<=now() AND betting_ends_at>now() AND settled_at IS NULL FOR UPDATE`,[roundId]);
-    if(!round.rows.length){await client.query('ROLLBACK');return {status:409,body:{error:'betting_closed'}};}
     if(old<amount){await client.query('ROLLBACK');return {status:409,body:{error:'insufficient_balance',balance:old}};}
     const next=old-amount;
     if(!Number.isSafeInteger(next)) throw Error('invalid_balance');

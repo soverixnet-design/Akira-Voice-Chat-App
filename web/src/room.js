@@ -267,12 +267,11 @@ function gameSheet(){
   $("sheet").querySelectorAll(".gf").forEach(function(b){b.onclick=function(){var t=b.textContent;close();if(window.__minor&&/Food|Slot|Spin|Card/.test(t)){toast("This game is closed for users under 18");return}toast(t+" Loading…")}})
 }
 function msgSheet(){open('<h3>💬 Messages</h3><div class="row"><div>🧑‍🎤 Rafi<small>Coming tonight?</small></div><small>2m</small></div><div class="row"><div>👩‍🦰 Nusrat<small>Thanks for the gift 💜</small></div><small>10m</small></div><div class="row"><div>🎧 Customer service<small>Your request has been received</small></div><small>1h</small></div>')}
-$("roomBtn").onclick=settings;$("rrpill").onclick=rewardSheet;setInterval(botGift,28000);rrPill();$("bGift").onclick=giftSheet;$("bGame").onclick=gameSheet;$("bMsg").onclick=msgSheet;$("bOwn").onclick=ownSheet;
+$("roomBtn").onclick=settings;$("rrpill").onclick=rewardSheet;rrPill();$("bGift").onclick=giftSheet;$("bGame").onclick=gameSheet;$("bMsg").onclick=msgSheet;$("bOwn").onclick=ownSheet;
 $("exit").onclick=function(){open('<h3>Leave the room?</h3><div class="acts" style="grid-template-columns:1fr 1fr"><button class="act" id="y1"><span>🚪</span>Leave</button><button class="act" id="n1"><span>↩️</span>Stay</button></div>');$("y1").onclick=function(){AkiraBridge.toApp({t:"exit"})};$("n1").onclick=close};
 $("min").onclick=function(){AkiraBridge.toApp({t:"min"})};
 $("mic").onclick=function(){myMute=!myMute;this.classList.toggle("off",myMute);this.textContent=myMute?"🔇":"🎤";seats[0].muted=myMute;render();if(akiraVoiceRoom){akiraVoiceRoom.localParticipant.setMicrophoneEnabled(!myMute).catch(function(e){toast("Microphone permission needed")})}else if(!myMute){akiraStartVoice()}toast(myMute?"Mic muted":"Mic on")};
 var TALK=["Greetings to everyone 👋","Will sing tonight 🎶","How is everyone?","Awesome room! 🔥","Come to the mic, friend 😄","Good night everyone 🌙"];
-setInterval(function(){var o=others();if(!o.length||chatOff)return;var s=o[Math.floor(Math.random()*o.length)];msg(s.n,s.e,TALK[Math.floor(Math.random()*TALK.length)],{ci:s.i,lv:10+s.i*3})},9000);
 var ER=[["😂","Smile","pop"],["😍","Love","jump"],["😎","Cool","spin"],["🔥","Fire","jump"],["👏","Applause","shake"],["🎉","Party","spin"],["😭","Cry","shake"],["😡","Anger","shake"],["🥳","Festival","jump"],["😘","Kiss","pop"],["🤩","Wow!","spin"],["👍","Awesome","pop"],["🙏","Thanks","pop"],["💯","100","jump"],["😴","Sleep","shake"],["💖","Heart","pop"]];
 var etab=0,emj={};
 function emojiSheet(){
@@ -301,7 +300,6 @@ function seatEmoji(idx,e){
     s.animate([{transform:"translate("+(cx+(k-2)*8)+"px,"+(cy-sz/2)+"px) translate(-50%,-50%) scale(.5)",opacity:0},{opacity:1,offset:.2},{transform:"translate("+(cx+dx)+"px,"+(cy-sz/2-56-k*7)+"px) translate(-50%,-50%) scale(1.1)",opacity:0}],{duration:1300,delay:350+k*140,easing:"ease-out",fill:"both"}).onfinish=function(){this.effect.target.remove()};}
 }
 var UN=["Arif","Sumi","Hasan","Lima","Ronnie","Jui","Shakil","Tamanna","Emon","Nazma","Rifat","Pinky","Sohel","Mou","Zahid","Rumi","Nayan","Shiuli","Kamal","Rain"],UE=["🧑","👩","🧔","👧","🧑‍💻","👩‍🎓","🧑‍🚀","👩‍🍳","🧑‍🔧","👩‍⚕️","😎","🧑‍🎤"],U=[],FOL={};
-for(var ui=0;ui<121;ui++)U.push({n:UN[ui%20]+(ui>=20?" "+bn(Math.floor(ui/20)+1):""),e:UE[(ui*7)%12],id:String(30000000+(ui+1)*4817923%60000000),lv:1+(ui*13)%58});
 function sid(s){return s.i===0?$("rid").textContent:String(20000000+(s.n.charCodeAt(0)*7919+s.i*104729)%9000000)}
 function total(){return seats.filter(function(s){return !s.empty&&!s.lock}).length+U.length}
 function usersSheet(q){
@@ -346,7 +344,7 @@ $("chat").onscroll=function(){if(this.scrollHeight-this.scrollTop-this.clientHei
 $("newb").onclick=function(){var c=$("chat");c.scrollTop=c.scrollHeight;this.style.display="none"};
 try{var W=AkiraBridge.getContext()||{};if(W.name){S.name=W.name;S.theme=W.theme||S.theme;S.pic=null;S.bg=null;window.__em=W.emoji;window.__minor=!!W.minor;if(W.id)$("rid").textContent=W.id}}catch(e){}
 applyTheme();render();setChat(true);updBtn();akiraStartVoice();AkiraBridge.onRoom(function(d){if(d.t==="gift"){if(d.seat>0)rec=[d.seat];giftSheet()}});
-sys("📢 Welcome to the room! Please behave politely.");msg("Rafi","🧑‍🎤","Greetings to everyone 👋",{ci:1,lv:16});msg("Nusrat","👩‍🦰","Will sing tonight 🎶",{ci:2,lv:19});
+sys("Welcome to the room");
 setInterval(function(){tick(false)},1600);
 
 // The native Back button closes room overlays before minimizing the room.

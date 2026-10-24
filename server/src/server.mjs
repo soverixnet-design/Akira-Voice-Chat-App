@@ -1,3 +1,4 @@
+import { profileRoutes } from './profiles.mjs';
 import http from 'node:http';
 import { listRooms, getRoom, getPool } from './database.mjs';
 import { register, login, authenticate, logout, profile } from './auth.mjs';
@@ -54,6 +55,7 @@ export const requestHandler = async (req, res) => {
       return send(503,{error:'auth_unavailable'});
     }
   }
+  if (await profileRoutes(req, url.pathname, send, authenticate, getPool)) return;
   // Mint short-lived, room-scoped LiveKit credentials only for authenticated members.
   const voiceMatch = url.pathname.match(/^\/api\/v1\/rooms\/(\d{1,18})\/voice-token$/);
   if (req.method === 'POST' && voiceMatch) {

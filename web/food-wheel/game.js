@@ -824,6 +824,7 @@
   /* ---------------- BOOT ---------------- */
   buildWheel(); buildChips(); applyLang(); renderUser(); renderSound(); renderBalance();
   fitWheel();
+  setInterval(() => { const previous = S.todayRev; refreshDailyWin(); if (previous !== S.todayRev) renderBalance(); }, 60000);
   server = qs.get('server') || '';
   token = qs.get('token') || '';
   const preset = (window.GREEDY_SERVER || '');

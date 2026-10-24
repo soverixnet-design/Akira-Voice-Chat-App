@@ -1,3 +1,4 @@
+import { getWallet, walletHistory } from './wallet.mjs';
 import { profileRoutes } from './profiles.mjs';
 import { requireAdmin, adminStats } from './admin.mjs';
 import http from 'node:http';
@@ -56,6 +57,14 @@ export const requestHandler = async (req, res) => {
       console.error('auth_failed',err.code || err.message);
       return send(503,{error:'auth_unavailable'});
     }
+  }
+  if (req.method === 'GET' && ['/api/v1/wallet','/api/v1/wallet/history'].includes(url.pathname)) {
+    try {
+      const user = await authenticate(req.headers.authorization);
+      if (!user) return send(401,{error:'unauthorized'});
+      if (url.pathname.endsWith('/history')) return send(200,{app:appId,transactions:await walletHistory(user.id)});
+      return send(200,{app:appId,wallet:await getWallet(user.id)});
+    } catch(err) { console.error('wallet_read_failed',err.message);return send(503,{error:'wallet_unavailable'}); }
   }
   if (await profileRoutes(req, url.pathname, send, authenticate, getPool)) return;
   // Mint short-lived, room-scoped LiveKit credentials only for authenticated members.

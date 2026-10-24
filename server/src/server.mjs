@@ -1,4 +1,5 @@
 import { getWallet, walletHistory } from './wallet.mjs';
+import { placeGameBet } from './game-bets.mjs';
 import { profileRoutes } from './profiles.mjs';
 import { requireAdmin, adminStats } from './admin.mjs';
 import http from 'node:http';
@@ -86,6 +87,23 @@ export const requestHandler = async (req, res) => {
         todayWinnings24h:Number(winnings.rows[0].total),recentBets:recent.rows,
         bettingEnabled:false});
     } catch(err) {console.error('game_overview_failed',err.message);return send(503,{error:'games_unavailable'}); }
+  }
+  const betMatch = url.pathname.match(/^\/api\/v1\/games\/(food-wheel|jackpot-fruit)\/bets$/);
+  if (req.method === 'POST' && betMatch) {
+    try {
+      const user=await authenticate(req.headers.authorization);
+      if(!user) return send(401,{error:'unauthorized'});
+      let raw='';
+      for await (const chunk of req) {
+        raw+=chunk;
+        if(raw.length>4096) return send(413,{error:'payload_too_large'});
+      }
+      let body;
+      try {body=JSON.parse(raw);} catch {return send(400,{error:'invalid_json'});}
+      if(!body || typeof body!=='object' || Array.isArray(body)) return send(400,{error:'invalid_bet'});
+      const result=await placeGameBet(user.id,betMatch[1],body);
+      return send(result.status,result.body);
+    } catch(err) {console.error('game_bet_failed',err.message);return send(503,{error:'bet_unavailable'});}
   }
   if (await profileRoutes(req, url.pathname, send, authenticate, getPool)) return;
   // Mint short-lived, room-scoped LiveKit credentials only for authenticated members.

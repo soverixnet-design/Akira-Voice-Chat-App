@@ -63,7 +63,7 @@
     },
     en: {
       lastWin: 'Last win', round: 'Round', placeBet: 'Place bets', spinning: 'Spinning', result: 'Result', waiting: 'Waiting',
-      today: "Today's revenue", repeat: 'Repeat', auto: 'Auto', online: 'playing', veg: 'Veg ×5', meat: 'Meat ×10–×45',
+      today: "Today's winnings (24h)", repeat: 'Repeat', auto: 'Auto', online: 'playing', veg: 'Veg ×5', meat: 'Meat ×10–×45',
       resSuffix: 'result', earn: 'Won this round', bets: 'Bet this round',
       rank: 'Top winners', noCoins: 'Not enough coins', betClosed: 'Betting closed — wait for next round',
       maxBet: 'Max bet for this round reached', noLast: 'No bets in last round', you: 'You',
@@ -97,7 +97,7 @@
   const payoutOf = (o, bets) => OUT[o].wins.reduce((a, w) => a + bets[w] * CONFIG.items[w].mult, 0);
 
   const S = {
-    lang: T[qs.get('lang')] ? qs.get('lang') : 'bn',
+    lang: 'en',
     user: { id: qs.get('uid') || 'guest', name: qs.get('name') || 'Player', avatar: qs.get('avatar') || '' },
     balance: qs.has('balance') ? Math.max(0, parseInt(qs.get('balance'), 10) || 0) : CONFIG.startBalance,
     round: parseInt(qs.get('round'), 10) || 580,
@@ -110,6 +110,26 @@
     bots: [], online: 0,
     mode: 'demo', ws: null, clockOffset: 0, reqSeq: 0, pending: new Map(), lastResult: null,
   };
+  // Demo-only rolling 24-hour gross winnings. This is not a verified wallet ledger.
+  const winKey = 'akira-greedy-wins-v1:' + S.user.id;
+  let winWindow = { start: Date.now(), total: 0 };
+  try {
+    const saved = JSON.parse(localStorage.getItem(winKey) || 'null');
+    if (saved && Number.isFinite(saved.start) && Number.isFinite(saved.total) &&
+        Date.now() >= saved.start && Date.now() - saved.start < 86400000) winWindow = saved;
+  } catch (_) {}
+  S.todayRev = Math.max(0, winWindow.total);
+  function recordDailyWin(amount) {
+    if (Date.now() - winWindow.start >= 86400000 || Date.now() < winWindow.start) {
+      winWindow = { start: Date.now(), total: 0 };
+    }
+    if (Number.isFinite(amount) && amount > 0) winWindow.total += amount;
+    S.todayRev = winWindow.total;
+    try { localStorage.setItem(winKey, JSON.stringify(winWindow)); } catch (_) {}
+  }
+  function refreshDailyWin() {
+    if (Date.now() - winWindow.start >= 86400000 || Date.now() < winWindow.start) recordDailyWin(0);
+  }
   if (qs.get('sheet') === '1') document.body.classList.add('sheet-mode');
   const t = (k) => T[S.lang][k];
 
@@ -240,8 +260,9 @@
   }
   function renderBalance() {
     $('balance').textContent = fmt(S.balance);
-    $('todayRev').textContent = (S.todayRev > 0 ? '+' : '') + fmt(S.todayRev);
-    $('todayRev').parentElement.classList.toggle('neg', S.todayRev < 0);
+    refreshDailyWin();
+    $('todayRev').textContent = fmt(S.todayRev);
+    $('todayRev').parentElement.classList.remove('neg');
     $('lastWin').textContent = fmt(S.lastWin);
     renderChips();
   }
@@ -541,7 +562,7 @@
     S.phase = 'result';
     const myTotal = sumMy();
     const winAmt = payoutOf(result, S.myBets);
-    S.balance += winAmt; S.lastWin = winAmt; S.todayRev += winAmt - myTotal;
+    S.balance += winAmt; S.lastWin = winAmt; recordDailyWin(winAmt);
     if (myTotal > 0) { S.lastBets = S.myBets.slice(); S.records.unshift({ round: S.round, idx: result, bet: myTotal, win: winAmt }); }
     S.history.unshift({ round: S.round, idx: result });
     if (S.history.length > 100) S.history.length = 100;
@@ -682,7 +703,7 @@
         clearTimeout(spinTimer);
         const you = m.you || { bet: 0, win: 0 };
         if (typeof you.balance === 'number') S.balance = you.balance;
-        S.lastWin = you.win; S.todayRev += you.win - you.bet;
+        S.lastWin = you.win; recordDailyWin(you.win);
         if (you.bet > 0) { S.lastBets = S.myBets.slice(); S.records.unshift({ round: m.round, idx: o, bet: you.bet, win: you.win }); }
         S.history.unshift({ round: m.round, idx: o });
         const top = (m.top || []).map((r) => ({ name: r.name, avatar: r.avatar, amt: r.win, me: r.userId === S.user.id }));

@@ -1,0 +1,21 @@
+import {JSDOM} from '../akira/node_modules/jsdom/lib/api.js';
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const dom=new JSDOM('<body><div id="v-me"><div class="ml2"></div></div></body>',{url:'https://test',runScripts:'outside-only'}),w=dom.window;
+w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};
+w.renderMe=()=>{w.document.getElementById('v-me').innerHTML='<div class="ml2"></div>'};w.akiraToken=()=> 'token';w.toast=()=>{};w.confirm=()=>true;
+let transfers=0;
+w.akiraRequest=async(path,method,b)=>{if(path.endsWith('seller-wallet'))return{enabled:true,balance:'1000',history:[]};if(path.endsWith('balance'))return{coins:'777',diamonds:'0'};if(path.includes('seller-recipient'))return{id:'100005',name:'Receiver'};if(path.endsWith('transfer')){transfers++;assert.equal(b.amount,100);assert.equal(b.recipientId,'100005');return{ok:true}};return{items:[]}};
+const src=readFileSync('seller-update/web/src/app.js','utf8');w.eval(src.slice(src.indexOf('/* Server-backed app menus')));
+const tick=()=>new Promise(r=>setTimeout(r,10));await tick();
+const sh=w.document.getElementById('akira-app-services').shadowRoot;
+assert.equal(sh.querySelector('#launch'),null);assert(!sh.textContent.includes('Community'));
+const menu=w.document.querySelector('[data-m=seller]');assert.equal(menu.hidden,false);assert(menu.textContent.includes('1000'));menu.click();await tick();
+assert.equal(sh.querySelector('#title').textContent,'Coin Seller');assert(sh.querySelector('#balance').textContent.includes('1000'));
+sh.querySelector('#recipient').value='100005';sh.querySelector('#lookup').click();await tick();assert(sh.querySelector('#recipient-name').textContent.includes('Receiver'));
+sh.querySelector('#seller-amount').value='100';sh.querySelector('#seller-send').click();await tick();assert.equal(transfers,1);assert.equal(sh.querySelector('#status').textContent,'Recharge successful.');
+w.document.querySelector('[data-m=inventory]').click();await tick();assert.equal(sh.querySelector('#title').textContent,'Inventory');
+// Admin page script syntax and funding navigation.
+const html=readFileSync('seller-update/server/src/admin.html','utf8');const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];new Function(script);
+assert(html.includes("'seller-funds':'Seller coins & ledger'"));assert(html.includes('Personal wallet is unchanged'));
+console.log('PASS: no Community launcher; seller profile menu, separate balance, recipient search, recharge and inventory navigation; admin funding script parses.');dom.window.close();

@@ -210,9 +210,17 @@
   buttons.append(block,report);back.insertAdjacentElement('beforebegin',buttons);
  };
  window.addEventListener('akira:voice-connected',syncMic);
- window.addEventListener('akira:wallet-updated',()=>{
-  try{S.coins=window.parent.coins();lockUI()}catch{}
- });
+ const syncWallet=()=>{
+  try{
+   const coins=Number(window.parent.coins?.());
+   if(Number.isSafeInteger(coins)&&coins>=0&&S.coins!==coins){
+    S.coins=coins;lockUI();
+   }
+  }catch{}
+ };
+ window.addEventListener('akira:wallet-updated',syncWallet);
+ setInterval(syncWallet,7000);
+ syncWallet();
  window.addEventListener('pagehide',()=>{stopped=true});
  myMute=true;mic.classList.add('off');mic.textContent='🔇';
  seats.splice(0,seats.length,...Array.from({length:10},(_,i)=>({empty:1,i,muted:true,talk:false})));

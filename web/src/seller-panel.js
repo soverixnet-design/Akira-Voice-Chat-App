@@ -28,7 +28,7 @@
    mountSellerAction();
  }
  const box=document.createElement('div');box.id='akiraSellerBox';
- box.innerHTML='<section><button type="button" id="akiraSellerClose" style="justify-self:end;background:#354067">✕ Close</button><h2>🪙 Coin Seller Panel</h2><div>Seller Balance: <strong id="akiraSellerBalance">—</strong></div><small>Personal Wallet is separate and will never be charged.</small><label>Receiver 6-digit User ID</label><input id="akiraSellerUser" inputmode="numeric" maxlength="6" placeholder="100001"><label>Recharge Coins</label><input id="akiraSellerAmount" type="number" min="1" step="1" placeholder="Amount"><button type="button" id="akiraSellerSend">Send Coins</button><p id="akiraSellerStatus" role="status"></p></section>';
+ box.innerHTML='<section><button type="button" id="akiraSellerClose" style="justify-self:end;background:#354067">✕ Close</button><h2>🪙 Coin Seller Panel</h2><div>Seller Balance: <strong id="akiraSellerBalance">—</strong></div><small>Personal Wallet is separate and will never be charged.</small><label>Receiver 6-digit User ID</label><input id="akiraSellerUser" inputmode="numeric" maxlength="6" placeholder="100001"><label>Recharge Coins</label><input id="akiraSellerAmount" type="number" min="1" step="1" placeholder="Amount"><button type="button" id="akiraSellerSend">Send Coins</button><p id="akiraSellerStatus" role="status"></p><button type="button" id="akiraSellerHistory" style="background:#354067">Recharge History</button><div id="akiraSellerHistoryList" aria-live="polite"></div></section>';
  document.body.appendChild(box);
  const q=id=>document.getElementById(id);
  const request=async(path,method='GET',data)=>{
@@ -60,6 +60,24 @@
   status.textContent=result.duplicate?'Already sent — no duplicate charge.':'Success! Receiver balance: '+result.recipientBalance;
   await refresh();window.dispatchEvent(new Event('akira:wallet-updated'));
  }catch(e){status.textContent='Not confirmed: '+e.message+'. Check history before retrying.';}finally{btn.disabled=false;}
+ };
+ q('akiraSellerHistory').onclick=async()=>{
+  const target=q('akiraSellerHistoryList');
+  target.textContent='Loading recent transfers...';
+  try{
+   const data=await request('/api/v1/seller/history');
+   const rows=Array.isArray(data.transfers)?data.transfers:[];
+   target.replaceChildren();
+   if(!rows.length){target.textContent='No seller transfers yet.';return;}
+   for(const transfer of rows){
+    const item=document.createElement('div');
+    item.style.cssText='padding:8px 0;border-bottom:1px solid #ffffff22;font-size:13px';
+    const amount=Number(transfer.amount).toLocaleString('en-US');
+    const when=transfer.createdAt?new Date(transfer.createdAt).toLocaleString():'';
+    item.textContent='ID '+String(transfer.recipientId)+' · '+amount+' coins · '+when;
+    target.appendChild(item);
+   }
+  }catch(e){target.textContent='History unavailable: '+e.message}
  };
  setInterval(refresh,30000);setTimeout(refresh,1800);
 })();

@@ -61,6 +61,12 @@ export const requestHandler = async (req, res) => {
       return send(503,{error:'auth_unavailable'});
     }
   }
+  if (req.method === 'GET' && url.pathname === '/api/v1/sellers') {
+    try {
+      const {rows}=await getPool().query("SELECT u.public_id AS \"publicId\",u.display_name AS \"displayName\",u.avatar_url AS \"avatarUrl\" FROM akira_seller_wallets s JOIN akira_users u ON u.id=s.user_id WHERE s.enabled=true ORDER BY u.public_id LIMIT 200");
+      return send(200,{sellers:rows});
+    } catch(err) {console.error('seller_list_failed',err.message);return send(503,{error:'seller_list_unavailable'});}
+  }
   if (['/api/v1/seller/wallet','/api/v1/seller/transfer','/api/v1/seller/history','/api/v1/admin/sellers/allocate'].includes(url.pathname)) {
     try {
       if (url.pathname==='/api/v1/admin/sellers/allocate') {

@@ -32,8 +32,16 @@ async function akiraStartVoice(){
     var data=await res.json();
     if(!res.ok)throw Error(data.error||"Voice server unavailable");
     var room=new window.LivekitClient.Room({adaptiveStream:true,dynacast:true});
-    room.on(window.LivekitClient.RoomEvent.TrackSubscribed,function(track){
-      if(track.kind==="audio"){var element=track.attach();element.dataset.akiraVoice="1";document.body.appendChild(element)}
+    room.on(window.LivekitClient.RoomEvent.TrackSubscribed,function(track,publication,participant){
+      if(track.kind==="audio"){
+        var peer=String(participant?.identity||'');
+        if(window.__akiraBlockedIds?.has(peer))return;
+        var element=track.attach();
+        element.dataset.akiraVoice="1";
+        element.dataset.akiraVoiceUser=peer;
+        element.autoplay=true;
+        document.body.appendChild(element);
+      }
     });
     room.on(window.LivekitClient.RoomEvent.TrackUnsubscribed,function(track){track.detach().forEach(function(el){el.remove()})});
     room.on(window.LivekitClient.RoomEvent.Disconnected,function(){

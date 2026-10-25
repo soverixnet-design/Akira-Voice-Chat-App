@@ -9,4 +9,5 @@ CREATE TABLE IF NOT EXISTS akira_account_deletion_requests (
  completed_at TIMESTAMPTZ,
  UNIQUE(user_id)
 );
+ALTER TABLE akira_account_deletion_requests ADD COLUMN IF NOT EXISTS reason TEXT NOT NULL DEFAULT '';
 COMMIT;

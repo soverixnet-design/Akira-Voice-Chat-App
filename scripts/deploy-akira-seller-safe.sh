@@ -17,7 +17,7 @@ DONE=0
 # IMPORTANT: never replace live web/src/app.js, web/admin.html,
 # server/src/control.mjs, server/src/admin.html, APKs or credentials.
 FILES=(server/src/server.mjs server/src/seller-wallet.mjs server/src/seller-admin.mjs
-  server/src/room-seats.mjs server/src/rooms.mjs server/migrations/011_room_seats.sql
+  server/src/room-seats.mjs server/src/rooms.mjs server/src/account-deletion.mjs server/migrations/011_room_seats.sql
   server/migrations/012_deletion_requests.sql server/migrations/013_user_safety.sql
   server/src/game-bets.mjs web/src/seller-panel.js web/src/seller-directory.js
   web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/game-overlay.js
@@ -80,7 +80,7 @@ done
 echo '=== CANDIDATE TESTS ==='
 (cd "$REVIEW/server" && npm install --ignore-scripts --no-audit --no-fund && npm test)
 for f in server/src/server.mjs web/src/seller-panel.js web/src/seller-directory.js \
-  web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/room.js web/src/room-live.js server/src/room-seats.mjs; do
+  web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/room.js web/src/room-live.js server/src/room-seats.mjs server/src/account-deletion.mjs; do
   node --check "$REVIEW/$f"
 done
 

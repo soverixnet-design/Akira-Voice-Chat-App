@@ -1,0 +1,35 @@
+name: Akira code checks
+on:
+  push:
+    branches:
+      - fix/akira-ci-auth-20261025
+  pull_request:
+    paths:
+      - 'server/**'
+      - 'web/src/**'
+      - 'web/admin-connected.html'
+      - '.github/workflows/akira-tests.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install API dependencies
+        working-directory: server
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Check JavaScript syntax
+        run: |
+          node --check server/src/server.mjs
+          node --check server/src/seller-admin.mjs
+          node --check server/src/seller-wallet.mjs
+          node --check web/src/seller-panel.js
+          node --check web/src/seller-directory.js
+      - name: Run unit and regression tests
+        working-directory: server
+        run: npm test

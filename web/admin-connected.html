@@ -44,7 +44,7 @@ const pages=[
  ['Rooms','rooms','🏠 Rooms'],['Rooms','events','🎉 Events'],['Rooms','themes','🎨 Themes & Backgrounds'],['Rooms','gifts','🎁 Gifts'],['Rooms','room-rewards','💰 Room Rewards'],['Rooms','rankings','🏆 Rankings'],['Rooms','levels','⭐ Levels & VIP'],['Rooms','tasks','📅 Tasks & Invites'],
  ['Games','lucky','🍀 Lucky Gifts'],['Games','games','🎮 Games'],
  ['App','banners','🖼️ Banners'],['App','notifications','🔔 Notifications'],['App','legal','📄 Legal & Help'],['App','settings','⚙️ Feature Switches'],
- ['Security','roles','🔐 Admin Roles'],['Security','audit','📜 Audit Log'],['Security','system','🖥️ System']
+ ['Security','roles','🔐 Admin Roles'],['Security','audit','📜 Audit Log'],['Security','reports','🛡️ User Reports'],['Security','deletion','🗑️ Account Deletion'],['Security','system','🖥️ System']
 ];
 const root=document.querySelector('#root');
 let token='',role='',currentPage='dash';
@@ -84,7 +84,7 @@ function loginPage(){token='';role='';root.innerHTML='';const screen=el('div','l
 function renderShell(){root.innerHTML='';const shell=el('div','app');shell.id='shell';const nav=el('nav');nav.id='nv';const brand=el('div','br');const logo=el('div','brand-icon','✦');const label=el('div');label.append(el('b','','Akira'),el('small','','Admin Control Panel'));brand.append(logo,label);nav.appendChild(brand);let section='';for(const [group,key,title] of pages){if(group!==section){nav.appendChild(el('div','nav-section',group));section=group}const a=el('a','',title);a.href='#'+key;a.dataset.page=key;a.onclick=e=>{e.preventDefault();render(key);shell.classList.remove('menu-open')};nav.appendChild(a)}
  const main=el('main');const top=el('div','top');top.append(button('☰',()=>shell.classList.toggle('menu-open'),'btn o s'));const heading=el('h2');heading.id='heading';top.appendChild(heading);top.appendChild(el('div','sp'));top.appendChild(el('div','who','Role: '+role));top.append(button('Log out',async()=>{try{await call('/api/v1/auth/logout',{method:'POST'})}catch{}loginPage()},'btn o s'));main.append(top,el('div'));main.lastChild.id='pg';shell.append(nav,main);root.appendChild(shell)
 }
-async function render(page,initial){currentPage=page;document.querySelectorAll('[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));const entry=pages.find(p=>p[1]===page);$('#heading').textContent=entry?.[2]||'Admin';$('#pg').replaceChildren();try{switch(page){case 'dash':await dashPage(initial);break;case 'users':await usersPage();break;case 'sellers':await sellersPage();break;case 'recharge':await rechargePage();break;case 'roles':await rolesPage();break;case 'audit':await auditPage();break;case 'rooms':await roomsPage();break;default:plannedPage()}}catch(err){notice('Unable to load this section: '+err.message)}}
+async function render(page,initial){currentPage=page;document.querySelectorAll('[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));const entry=pages.find(p=>p[1]===page);$('#heading').textContent=entry?.[2]||'Admin';$('#pg').replaceChildren();try{switch(page){case 'dash':await dashPage(initial);break;case 'users':await usersPage();break;case 'sellers':await sellersPage();break;case 'recharge':await rechargePage();break;case 'roles':await rolesPage();break;case 'audit':await auditPage();break;case 'reports':await reportsPage();break;case 'deletion':await deletionPage();break;case 'rooms':await roomsPage();break;default:plannedPage()}}catch(err){notice('Unable to load this section: '+err.message)}}
 async function dashPage(initial){const data=initial||await call('/api/v1/admin/dashboard');const stats=data.stats||{};const c=card('Live Database Statistics');line(c,'Registered users',stats.users);line(c,'Rooms',stats.rooms);line(c,'Signed-in role',data.role);notice('Only verified API values are displayed. Online users, revenue and game metrics require additional backend endpoints.');const actions=card('Quick Actions');actions.append(button('Find user',()=>render('users')),button('Coin sellers',()=>render('sellers')),button('Wallet recharge',()=>render('recharge')))}
 async function usersPage(){const c=card('Find account by 6-digit ID');const fields=el('div','fields');const uid=input(fields,'User ID','100001');const actions=el('div','controls');const result=el('div');actions.append(button('Search user',async()=>{result.replaceChildren();if(!checkId(uid.value)){result.textContent='Enter a valid 6-digit ID';return}try{const d=await call('/api/v1/admin/users/search?id='+encodeURIComponent(uid.value.trim()));if(!d.user){result.textContent='User not found';return}line(result,'ID',d.user.public_id);line(result,'Name',d.user.display_name);line(result,'Country',d.user.country_code||'-')}catch(e){result.textContent=e.message}}));
  actions.append(button('Recent users',async()=>{result.replaceChildren();try{const d=await call('/api/v1/admin/users');for(const u of d.users||[])line(result,(u.display_name||'User')+' · '+u.public_id,u.country_code||'—')}catch(e){result.textContent=e.message}},'btn o s'));c.append(fields,actions,result);
@@ -122,6 +122,31 @@ async function rechargePage(){notice('Direct Super Admin recharge is available. 
 async function rolesPage(){if(role!=='super_admin'){notice('Super Admin permission required.');return}const c=card('Assigned admin roles');const data=await call('/api/v1/admin/roles');for(const x of data.roles||[])line(c,(x.display_name||'Admin')+' · '+x.public_id,x.role);const f=card('Change role');const fields=el('div','fields');const id=input(fields,'User ID','100001');const label=el('label','','Access level');const sel=el('select');for(const option of ['moderator','manager','admin','remove']){const o=el('option','',option);o.value=option;sel.appendChild(o)}label.appendChild(sel);fields.appendChild(label);f.appendChild(fields);f.append(button('Save role',async()=>{if(!checkId(id.value)){setStatus('Invalid User ID',true);return}if(!confirm('Set role '+sel.value+' for '+id.value+'?'))return;try{await post('/api/v1/admin/roles',{publicId:id.value.trim(),role:sel.value});await render('roles')}catch(e){setStatus(e.message,true)}}));const s=el('p','status');s.id='status';f.appendChild(s)}
 async function auditPage(){if(role!=='super_admin'){notice('Super Admin permission required.');return}const r=await call('/api/v1/admin/audit');const c=card('Server Audit History');for(const x of r.events||[])line(c,(x.action||'Action')+' · '+(x.target_id||''),new Date(x.created_at).toLocaleString());if(!(r.events||[]).length)c.appendChild(el('p','','No audit events.'));notice('This list shows the real server audit endpoint, not the local demo log.')}
 async function roomsPage(){const r=await call('/api/v1/rooms');const c=card('Live room directory');for(const x of r.rooms||[])line(c,x.name||'Room','ID '+x.id);if(!(r.rooms||[]).length)c.appendChild(el('p','','No rooms found.'));notice('Room editing/locking controls require protected server endpoints before they can be enabled.')}
+
+async function reportsPage(){
+ const c=card('Voice Chat User Reports');
+ c.appendChild(el('p','subtle','Verified user reports from the Akira database. Ban/restrict an account only after review using User Management.'));
+ const result=await call('/api/v1/admin/reports');
+ const list=result.reports||[];
+ c.appendChild(el('p','subtle',list.length+' recent reports'));
+ if(!list.length)c.appendChild(el('p','','No reports recorded.'));
+ for(const r of list){
+  const row=el('div','rowline');
+  row.append(el('span','',String(r.reportedId)+' · '+r.reason),el('small','',String(r.status)));
+  c.appendChild(row);
+  if(r.details)c.appendChild(el('p','subtle',String(r.details).slice(0,500)));
+ }
+}
+async function deletionPage(){
+ if(role!=='super_admin'){notice('Super Admin permission required.');return}
+ const c=card('Account Deletion Requests');
+ c.appendChild(el('p','subtle','Requests must be fulfilled according to the privacy policy. Viewing this queue does NOT delete user accounts.'));
+ const result=await call('/api/v1/admin/deletion-requests');
+ const list=result.requests||[];
+ c.appendChild(el('p','subtle',list.length+' recent requests'));
+ if(!list.length)c.appendChild(el('p','','No account deletion requests.'));
+ for(const r of list)line(c,String(r.publicId)+' · '+String(r.displayName||'User'),String(r.status)+' · '+new Date(r.requestedAt).toLocaleDateString());
+}
 function plannedPage(){const p=pages.find(x=>x[1]===currentPage);const name=p?p[2]:'Feature';notice(name+' is not connected yet. The demo preview cannot change Akira until its protected backend API and database operations are implemented and tested.');const c=card('Implementation status');line(c,'Feature',name);line(c,'Current state','Read-only placeholder · Not live');line(c,'Required','Authenticated endpoint + authorization + server-side validation');line(c,'Rollout','Backup → tests → staging → production')}
 loginPage();
 </script></body></html>

@@ -17,10 +17,12 @@ DONE=0
 # IMPORTANT: never replace live web/src/app.js, web/admin.html,
 # server/src/control.mjs, server/src/admin.html, APKs or credentials.
 FILES=(server/src/server.mjs server/src/seller-wallet.mjs server/src/seller-admin.mjs
+  server/src/room-seats.mjs server/src/rooms.mjs server/migrations/011_room_seats.sql
   server/src/game-bets.mjs web/src/seller-panel.js web/src/seller-directory.js
   web/src/wallet-sync.js web/src/wallet-safety.js web/src/game-overlay.js
+  web/src/room.js web/src/room-live.js
   web/game-live.html web/admin-connected.html)
-SAVE=("${FILES[@]}" web/index.html server/compose.yaml)
+SAVE=("${FILES[@]}" web/index.html web/room.html server/compose.yaml)
 
 restore_live() {
   echo "RESTORING previous API and UI from $BACKUP"
@@ -77,7 +79,7 @@ done
 echo '=== CANDIDATE TESTS ==='
 (cd "$REVIEW/server" && npm install --ignore-scripts --no-audit --no-fund && npm test)
 for f in server/src/server.mjs web/src/seller-panel.js web/src/seller-directory.js \
-  web/src/wallet-sync.js web/src/wallet-safety.js; do
+  web/src/wallet-sync.js web/src/wallet-safety.js web/src/room.js web/src/room-live.js server/src/room-seats.mjs; do
   node --check "$REVIEW/$f"
 done
 
@@ -124,6 +126,8 @@ docker exec -i akira-postgres pg_restore --list < "$BACKUP/database/akira-db.dum
 echo "Backup: $BACKUP"
 
 DEPLOY_STARTED=1
+echo '=== APPLY ADDITIVE ROOM SEAT MIGRATION (BACKUP ALREADY VERIFIED) ==='
+docker exec -i akira-postgres psql -U akira -d akira_db -v ON_ERROR_STOP=1 < "$REVIEW/server/migrations/011_room_seats.sql"
 for f in "${FILES[@]}"; do
   mkdir -p "$ROOT/$(dirname "$f")"
   cp -a "$REVIEW/$f" "$ROOT/$f"
@@ -145,6 +149,18 @@ for anchor,addon in scripts:
     if a not in s: raise RuntimeError(f'Expected script tag missing: {anchor}')
     s=s.replace(a,a+'\n'+f'<script src="{addon}"></script>',1)
 p.write_text(s)
+PY
+
+# Preserve the user's original room.html and only load the new real seat adapter.
+python3 - "$ROOT/web/room.html" <<'PY'
+from pathlib import Path
+import sys
+p=Path(sys.argv[1]);s=p.read_text()
+if 'src="src/room-live.js"' not in s:
+    anchor='<script src="src/room.js"></script>'
+    if anchor not in s: raise RuntimeError('Original room.js script missing: merge manually')
+    s=s.replace(anchor,anchor+'\n<script src="src/room-live.js"></script>',1)
+    p.write_text(s)
 PY
 
 # Never replace local LiveKit, Docker, database or other Compose configuration.

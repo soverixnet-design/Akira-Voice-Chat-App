@@ -36,6 +36,14 @@
 </div>
 <pre id="akiraSearchResult" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
 </section>
+<section class="card" id="akiraSellerAllocation" style="display:none">
+<h2>🪙 Coin Seller Balance</h2>
+<p>Allocate seller inventory separately. This never uses the seller's personal wallet.</p>
+<input id="akiraSellerId" inputmode="numeric" maxlength="6" placeholder="Seller 6-digit User ID">
+<input id="akiraSellerCoins" type="number" min="1" step="1" placeholder="Coins to allocate">
+<button type="button" id="akiraSellerAllocateBtn">Add Seller Coins</button>
+<p id="akiraSellerAllocateResult" role="status"></p>
+</section>
 <section class="card" id="akiraRolesPanel" style="display:none">
 <h2>Admin Roles</h2><p>Super admin only. Assign admin, manager or moderator access.</p>
 <input id="akiraRoleId" inputmode="numeric" maxlength="6" placeholder="6-digit User ID">
@@ -108,6 +116,7 @@ document.getElementById('loginForm').addEventListener('submit',async event=>{
   document.getElementById('dashboard').style.display='block';
   document.getElementById('akiraUserSearch').style.display='block';
   document.getElementById('akiraRolesPanel').style.display=data.role==='super_admin'?'block':'none';
+  document.getElementById('akiraSellerAllocation').style.display=data.role==='super_admin'?'block':'none';
   msg.textContent='';
  }catch(error){msg.textContent=error.message;document.getElementById('password').value='';}
 });
@@ -117,6 +126,7 @@ document.getElementById('logout').onclick=async()=>{
  document.getElementById('dashboard').style.display='none';
  document.getElementById('akiraUserSearch').style.display='none';
  document.getElementById('akiraRolesPanel').style.display='none';
+ document.getElementById('akiraSellerAllocation').style.display='none';
  document.getElementById('login').style.display='block';
  if(token)await fetch(api+'/api/v1/auth/logout',{method:'POST',headers:{Authorization:'Bearer '+token}}).catch(()=>{});
 };
@@ -191,5 +201,18 @@ document.getElementById('akiraRoleRefresh').onclick=async()=>{
   if(!rr.ok||!ar.ok)throw Error(roles.error||audit.error||'Request failed');
   out.textContent='ROLES\n'+(roles.roles||[]).map(x=>x.public_id+' '+x.display_name+' — '+x.role).join('\n')+'\n\nRECENT AUDIT\n'+(audit.events||[]).map(x=>x.created_at+' '+x.action+' '+x.target_id).join('\n');
  }catch(e){out.textContent='Error: '+e.message;}
+};
+document.getElementById('akiraSellerAllocateBtn').onclick=async()=>{
+ const id=document.getElementById('akiraSellerId').value.trim();
+ const amount=Number(document.getElementById('akiraSellerCoins').value);
+ const out=document.getElementById('akiraSellerAllocateResult');
+ if(!/^\d{6}$/.test(id)||!Number.isSafeInteger(amount)||amount<=0){out.textContent='Enter valid 6-digit Seller ID and coin amount.';return;}
+ if(!confirm('Add '+amount+' SELLER coins to '+id+'? Personal Wallet will not change.'))return;
+ const btn=document.getElementById('akiraSellerAllocateBtn');btn.disabled=true;out.textContent='Allocating…';
+ try{
+  const r=await akiraFetch('/api/v1/admin/sellers/allocate',{method:'POST',headers:{Authorization:'Bearer '+activeToken,'Content-Type':'application/json'},body:JSON.stringify({publicId:id,amount,requestId:crypto.randomUUID()})});
+  const data=await r.json();if(!r.ok)throw Error(data.error||'Allocation failed');
+  out.textContent='Success! Seller balance: '+Number(data.balance).toLocaleString();
+ }catch(e){out.textContent='Failed: '+e.message;}finally{btn.disabled=false;}
 };
 </script></body></html>

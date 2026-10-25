@@ -1,9 +1,9 @@
 import {getPool} from './database.mjs';
 
-export async function setSellerStatus(adminId, publicId, enabled) {
+export async function setSellerStatus(adminId, publicId, enabled, pool = getPool()) {
   if (!/^\d{6}$/.test(String(publicId ?? '')) || typeof enabled !== 'boolean')
     return {status:400,error:'invalid_seller_status'};
-  const db=await getPool().connect();
+  const db=await pool.connect();
   try {
     await db.query('BEGIN');
     const found=await db.query('SELECT id FROM akira_users WHERE public_id=$1 AND is_banned=false FOR UPDATE',[publicId]);

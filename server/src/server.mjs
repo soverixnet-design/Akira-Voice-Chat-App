@@ -1,4 +1,5 @@
 import { getWallet, walletHistory, applyWalletDelta } from './wallet.mjs';
+import { sellerBalance, sellerCredit, sellerSend } from './seller-wallet.mjs';
 import { placeGameBet } from './game-bets.mjs';
 import { startGameEngine } from './game-engine.mjs';
 import { profileRoutes } from './profiles.mjs';
@@ -59,6 +60,32 @@ export const requestHandler = async (req, res) => {
       console.error('auth_failed',err.code || err.message);
       return send(503,{error:'auth_unavailable'});
     }
+  }
+  if (['/api/v1/seller/wallet','/api/v1/seller/transfer','/api/v1/admin/sellers/allocate'].includes(url.pathname)) {
+    try {
+      if (url.pathname==='/api/v1/admin/sellers/allocate') {
+        if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+        const admin=await requireAdmin(req.headers.authorization);
+        if(admin.error)return send(admin.status,{error:admin.error});
+        if(admin.role!=='super_admin')return send(403,{error:'super_admin_required'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+        let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'invalid_json'});}
+        const result=await sellerCredit(admin.user.id,body.publicId,body.amount,body.requestId);
+        return send(result.status,result);
+      }
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      if(url.pathname==='/api/v1/seller/wallet'){
+        if(req.method!=='GET')return send(405,{error:'method_not_allowed'});
+        const wallet=await sellerBalance(user.id);
+        return wallet&&wallet.enabled?send(200,{wallet}):send(403,{error:'seller_not_enabled'});
+      }
+      if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+      let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+      let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'invalid_json'});}
+      const result=await sellerSend(user.id,body.publicId,body.amount,body.requestId);
+      return send(result.status,result);
+    }catch(err){console.error('seller_wallet_failed',err.message);return send(503,{error:'seller_wallet_unavailable'});}
   }
   if (req.method === 'GET' && ['/api/v1/wallet','/api/v1/wallet/history'].includes(url.pathname)) {
     try {

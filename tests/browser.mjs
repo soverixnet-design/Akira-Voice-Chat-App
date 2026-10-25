@@ -42,5 +42,51 @@ try{
     results.push({width,height,status:'passed'});console.log(`PASS ${width}x${height}`);
     await page.close();
   }
+
+  // Test the REAL web UI against a local simulated Akira API; never mutate production coins.
+  {
+    const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
+    const errors=[];
+    page.on('pageerror',err=>errors.push(err.message));
+    await page.addInitScript(()=>localStorage.setItem('akira_server_token_v1','A'.repeat(43)));
+    await page.route('https://api.soverixnet.online/**',async route=>{
+      const req=route.request(),path=new URL(req.url()).pathname;
+      const headers={'access-control-allow-origin':'http://127.0.0.1:4174','access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'authorization,content-type'};
+      if(req.method()==='OPTIONS')return route.fulfill({status:204,headers});
+      const payload=path==='/api/v1/wallet'?{wallet:{balance:6500}}:
+        path==='/api/v1/seller/wallet'?{wallet:{balance:20000,enabled:true}}:
+        path==='/api/v1/sellers'?{sellers:[{publicId:'100012',displayName:'Verified Seller',avatarUrl:null}]}:
+        path==='/api/v1/seller/history'?{transfers:[{recipientId:'100101',amount:100,createdAt:'2026-10-25T10:00:00Z'}]}:
+        path==='/api/v1/seller/transfer'?{balance:19900,recipientBalance:6600,duplicate:false}:
+        path==='/api/v1/rooms'?{rooms:[]}:{ok:true};
+      await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(payload)});
+    });
+    await page.goto('http://127.0.0.1:4174');
+    await page.locator('#sp.off').waitFor();
+    await page.locator('.ni[data-v="me"]').click();
+    await page.locator('#akiraSellerDirectoryButton').waitFor();
+    await page.waitForFunction(()=>window.coins()===6500);
+    await page.waitForFunction(()=>document.getElementById('akiraSellerOpen')?.style.display==='block');
+    assert.deepEqual(await page.locator('#v-me #wr, #v-me #akiraSellerDirectoryButton, #v-me #akiraSellerOpen').evaluateAll(nodes=>nodes.map(n=>n.id)),['wr','akiraSellerDirectoryButton','akiraSellerOpen']);
+    await page.locator('#akiraSellerDirectoryButton').click();
+    await page.getByText('Verified Seller',{exact:true}).waitFor();
+    assert.equal(await page.getByText('Rafi Coin Hub').count(),0);
+    await page.evaluate(()=>closeSheet());
+    await page.locator('#akiraSellerOpen').click();
+    await page.locator('#akiraSellerHistory').click();
+    await page.getByText(/100101/).waitFor();
+    await page.locator('#akiraSellerUser').fill('100101');
+    await page.locator('#akiraSellerAmount').fill('100');
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('#akiraSellerSend').click();
+    await page.getByText(/Success! Receiver balance/).waitFor();
+    await page.locator('#akiraSellerClose').click();
+    await page.evaluate(()=>rechargeSheet());
+    await page.locator('#rcp [data-p]').first().click();
+    await page.getByText(/not connected to the real wallet yet/).waitFor();
+    assert.deepEqual(errors,[]);
+    results.push({width:390,height:844,status:'seller_wallet_passed'});
+    await page.close();
+  }
   await writeFile('test-results/browser.json',JSON.stringify(results,null,2));
 }finally{await browser.close();server.kill()}

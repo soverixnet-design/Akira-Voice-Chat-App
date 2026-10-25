@@ -37,6 +37,14 @@
    return {n:u.displayName||'User',e:'👤',id:String(u.publicId),i,muted:String(u.publicId)!==currentId||myMute,talk:false,real:true};
   });
   seats.splice(0,seats.length,...next);
+  // All names/IDs are returned by the room server, never invented placeholder users.
+  if(Array.isArray(data.members)&&typeof U!=='undefined'){
+   const seatedIds=new Set(data.seats.map(s=>String(s.publicId)));
+   const audience=data.members.filter(u=>!seatedIds.has(String(u.publicId))).map(u=>({
+     n:u.displayName||'User',e:'👤',id:String(u.publicId),lv:1
+   }));
+   U.splice(0,U.length,...audience);
+  }
   S.n=incoming;
   if(typeof data.name==='string')S.name=data.name;
   if(data.themeKey&&TH.some(x=>x.id===data.themeKey))S.theme=data.themeKey;
@@ -106,6 +114,15 @@
    return;
   }
   oldSettings();
+  const seatSettings=document.getElementById('rSe');
+  if(seatSettings)seatSettings.onclick=()=>{
+   open('<h3>🪑 Microphone seats</h3><div class="lbl">Select a server-backed seat count</div><div class="acts">'+[5,10,12].map(n=>'<button class="act" data-seat-count="'+n+'">'+n+' seats</button>').join('')+'</div>');
+   document.querySelectorAll('#sheet [data-seat-count]').forEach(btn=>btn.onclick=async()=>{
+    try{const updated=await request('POST','settings',{seatCount:Number(btn.dataset.seatCount)});
+      draw(updated);close();notify('Seat count saved')}
+    catch(err){notify('Seats: '+err.message)}
+   });
+  };
   const save=document.getElementById('save');
   if(save)save.onclick=async()=>{
    save.disabled=true;
@@ -127,6 +144,17 @@
  document.getElementById('sendTxt')?.addEventListener('click',e=>{
   e.preventDefault();e.stopImmediatePropagation();
   notify('Live text chat is not yet connected.');
+ },true);
+ document.getElementById('txt')?.addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;
+  e.preventDefault();e.stopImmediatePropagation();
+  notify('Live text chat is not yet connected.');
+ },true);
+ document.addEventListener('click',e=>{
+  const target=e.target?.closest?.('#sheet .act[data-a]');
+  if(!target||!['fo','iv','dn','kk','kick','lock','unlock','mute','take','down'].includes(target.dataset.a))return;
+  e.preventDefault();e.stopImmediatePropagation();
+  notify('This room action needs server permissions and is not enabled yet.');
  },true);
  window.addEventListener('akira:voice-connected',syncMic);
  window.addEventListener('akira:wallet-updated',()=>{

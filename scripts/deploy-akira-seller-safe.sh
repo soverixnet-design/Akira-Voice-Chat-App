@@ -157,6 +157,26 @@ if 'AKIRA_ALLOWED_ORIGINS:' not in s:
     s=s.replace(a,a+'\n      AKIRA_ALLOWED_ORIGINS: "'+sys.argv[2]+'"',1)
     p.write_text(s)
 PY
+# Never silently lose live LiveKit credentials or game-engine configuration.
+# The running container and proposed Compose config must agree on these values.
+python3 - "$ROOT/server/compose.yaml" "$ROOT/server" <<'PY'
+import json,subprocess,sys
+compose=sys.argv[1];directory=sys.argv[2]
+prefix=['docker','compose','-f',compose,'--project-directory',directory]
+cid=subprocess.check_output(prefix+['ps','-q','akira-api'],text=True).strip()
+if not cid:
+    raise RuntimeError('No running Akira API found; refusing to recreate an unknown service')
+existing=json.loads(subprocess.check_output(['docker','inspect',cid],text=True))[0]
+live=dict(item.split('=',1) for item in existing['Config']['Env'] if '=' in item)
+desired=json.loads(subprocess.check_output(prefix+['config','--format','json'],text=True))
+future=desired['services']['akira-api'].get('environment') or {}
+for key in ('AKIRA_LIVEKIT_API_KEY','AKIRA_LIVEKIT_API_SECRET','AKIRA_LIVEKIT_URL','AKIRA_GAME_ENGINE_ENABLED'):
+    current=live.get(key,'')
+    planned=str(future.get(key,'') or '')
+    if current and planned!=current:
+        raise RuntimeError(f'{key} would change during restart. Reuse the original env-file settings before deploying.')
+print('PASS: Existing LiveKit and game-engine settings will be retained (values hidden).')
+PY
 echo '=== REBUILD ONLY THE AKIRA API; PRESERVE POSTGRES/LIVEKIT ==='
 docker compose -f "$ROOT/server/compose.yaml" --project-directory "$ROOT/server" build akira-api
 docker compose -f "$ROOT/server/compose.yaml" --project-directory "$ROOT/server" up -d --no-deps akira-api
@@ -170,6 +190,14 @@ for attempt in $(seq 1 20); do
 done
 [[ "$LIVE_READY" == 1 ]] || { echo 'Live API health failed'; exit 1; }
 node "$REVIEW/scripts/smoke-prod.mjs"
+echo '=== VERIFY NEW WEB FILES ARE SERVED ==='
+WEB_ORIGIN="${AKIRA_WEB_ORIGIN:-https://voice.soverixnet.online}"
+curl -fsS --max-time 15 "$WEB_ORIGIN/admin-connected.html" -o "$BACKUP/admin-served-check.html"
+grep -q 'Akira Connected Admin Preview' "$BACKUP/admin-served-check.html" ||
+  { echo 'Admin Panel not served from current website root'; exit 1; }
+curl -fsS --max-time 15 "$WEB_ORIGIN/" -o "$BACKUP/index-served-check.html"
+grep -q 'seller-directory.js' "$BACKUP/index-served-check.html" ||
+  { echo 'Updated seller directory script not in live website HTML'; exit 1; }
 DONE=1
 echo "DEPLOYMENT AND READ-ONLY SMOKE TESTS PASSED. Backup: $BACKUP"
 echo 'A real authorized seller-to-user coin transfer and voice/game device tests remain.'

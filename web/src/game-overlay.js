@@ -23,7 +23,7 @@
     const inRoom=!!document.getElementById('rw')?.classList.contains('on');
     root.classList.toggle('inRoom',inRoom);
     root.querySelector('.gameTitle').textContent='🎡 Food Wheel';
-    frame.src='food-wheel/index.html?demo=offline&lang=en&sound=0';
+    frame.src='game-live.html?game='+encodeURIComponent(game);
     root.classList.add('open');
   }
   root.querySelector('.gameClose').addEventListener('click',close);

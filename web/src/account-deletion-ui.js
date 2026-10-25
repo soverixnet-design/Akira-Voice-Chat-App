@@ -16,7 +16,7 @@
    if(!token){if(typeof toast==='function')toast('Sign in to request deletion');return}
    deleteBtn.disabled=true;
    try{
-    const r=await fetch(api+'/api/v1/account/deletion-request',{method:'POST',headers:{Authorization:'Bearer '+token}});
+    const r=await fetch(api+'/api/v1/account/deletion-request',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({confirm:'DELETE'})});
     const data=await r.json().catch(()=>({}));
     if(!r.ok)throw Error(data.error||'Request failed');
     deleteBtn.textContent='Deletion request received';

@@ -43,6 +43,7 @@ finish() {
     restore_live || true
   fi
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
   if [[ -d "$REVIEW" ]]; then
     git -C "$ROOT" worktree remove --force "$REVIEW" >/dev/null 2>&1 || true
   fi

@@ -18,10 +18,11 @@ DONE=0
 # server/src/control.mjs, server/src/admin.html, APKs or credentials.
 FILES=(server/src/server.mjs server/src/seller-wallet.mjs server/src/seller-admin.mjs
   server/src/room-seats.mjs server/src/rooms.mjs server/migrations/011_room_seats.sql
+  server/migrations/012_deletion_requests.sql server/migrations/013_user_safety.sql
   server/src/game-bets.mjs web/src/seller-panel.js web/src/seller-directory.js
-  web/src/wallet-sync.js web/src/wallet-safety.js web/src/game-overlay.js
+  web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/game-overlay.js
   web/src/room.js web/src/room-live.js
-  web/game-live.html web/admin-connected.html)
+  web/game-live.html web/admin-connected.html web/delete-account.html)
 SAVE=("${FILES[@]}" web/index.html web/room.html server/compose.yaml)
 
 restore_live() {
@@ -79,7 +80,7 @@ done
 echo '=== CANDIDATE TESTS ==='
 (cd "$REVIEW/server" && npm install --ignore-scripts --no-audit --no-fund && npm test)
 for f in server/src/server.mjs web/src/seller-panel.js web/src/seller-directory.js \
-  web/src/wallet-sync.js web/src/wallet-safety.js web/src/room.js web/src/room-live.js server/src/room-seats.mjs; do
+  web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/room.js web/src/room-live.js server/src/room-seats.mjs; do
   node --check "$REVIEW/$f"
 done
 
@@ -128,6 +129,8 @@ echo "Backup: $BACKUP"
 DEPLOY_STARTED=1
 echo '=== APPLY ADDITIVE ROOM SEAT MIGRATION (BACKUP ALREADY VERIFIED) ==='
 docker exec -i akira-postgres psql -U akira -d akira_db -v ON_ERROR_STOP=1 < "$REVIEW/server/migrations/011_room_seats.sql"
+docker exec -i akira-postgres psql -U akira -d akira_db -v ON_ERROR_STOP=1 < "$REVIEW/server/migrations/012_deletion_requests.sql"
+docker exec -i akira-postgres psql -U akira -d akira_db -v ON_ERROR_STOP=1 < "$REVIEW/server/migrations/013_user_safety.sql"
 for f in "${FILES[@]}"; do
   mkdir -p "$ROOT/$(dirname "$f")"
   cp -a "$REVIEW/$f" "$ROOT/$f"
@@ -142,7 +145,8 @@ scripts=[('src/app.js','src/game-overlay.js'),
  ('src/game-overlay.js','src/seller-panel.js'),
  ('src/seller-panel.js','src/seller-directory.js'),
  ('src/profile-app.js','src/wallet-sync.js'),
- ('src/wallet-sync.js','src/wallet-safety.js')]
+ ('src/wallet-sync.js','src/wallet-safety.js'),
+ ('src/wallet-safety.js','src/account-deletion-ui.js')]
 for anchor,addon in scripts:
     if f'src="{addon}"' in s: continue
     a=f'<script src="{anchor}"></script>'
@@ -208,7 +212,7 @@ done
 [[ "$LIVE_READY" == 1 ]] || { echo 'Live API health failed'; exit 1; }
 node "$REVIEW/scripts/smoke-prod.mjs"
 echo '=== VERIFY NEW WEB FILES ARE SERVED ==='
-WEB_ORIGIN="${AKIRA_WEB_ORIGIN:-https://voice.soverixnet.online}"
+WEB_ORIGIN="${AKIRA_WEB_ORIGIN:-https://api.soverixnet.online/app}"
 curl -fsS --max-time 15 "$WEB_ORIGIN/admin-connected.html" -o "$BACKUP/admin-served-check.html"
 grep -q 'Akira Connected Admin Preview' "$BACKUP/admin-served-check.html" ||
   { echo 'Admin Panel not served from current website root'; exit 1; }

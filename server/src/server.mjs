@@ -274,6 +274,29 @@ export const requestHandler = async (req, res) => {
     try { const room = await getRoom(roomMatch[1]); return room ? send(200, { app: appId, room }) : send(404, { error: 'room_not_found', app: appId }); }
     catch (err) { console.error('room_read_failed', err.message); return send(503, { error: 'database_unavailable', app: appId }); }
   }
+  if (url.pathname === '/api/v1/account/deletion-request' && req.method === 'POST') {
+    try {
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      const {rows}=await getPool().query(
+        "INSERT INTO akira_account_deletion_requests(user_id) VALUES($1) ON CONFLICT(user_id) DO UPDATE SET requested_at=now() WHERE akira_account_deletion_requests.status <> 'completed' RETURNING requested_at,status",
+        [user.id]
+      );
+      if(!rows.length)return send(409,{error:'request_already_completed'});
+      return send(202,{ok:true,status:rows[0].status,requestedAt:rows[0].requested_at,
+        message:'Deletion request received. Account deletion is not instant; support will process your request.'});
+    }catch(err){console.error('deletion_request_failed',err.message);return send(503,{error:'deletion_request_unavailable'})}
+  }
+  if (url.pathname === '/api/v1/admin/deletion-requests' && req.method === 'GET') {
+    try{
+      const admin=await requireAdmin(req.headers.authorization);
+      if(admin.error)return send(admin.status,{error:admin.error});
+      if(admin.role!=='super_admin')return send(403,{error:'super_admin_required'});
+      const {rows}=await getPool().query(
+       'SELECT d.id,d.requested_at AS "requestedAt",d.status,u.public_id::text AS "publicId",u.display_name AS "displayName" FROM akira_account_deletion_requests d JOIN akira_users u ON u.id=d.user_id ORDER BY d.requested_at DESC LIMIT 100');
+      return send(200,{requests:rows});
+    }catch(err){console.error('deletion_queue_failed',err.message);return send(503,{error:'deletion_queue_unavailable'})}
+  }
   if (req.method === 'GET' && url.pathname === '/api/v1/admin/dashboard') {
     try {
       const admin = await requireAdmin(req.headers.authorization);

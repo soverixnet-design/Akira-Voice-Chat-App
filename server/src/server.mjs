@@ -138,7 +138,7 @@ export const requestHandler = async (req, res) => {
       ]);
       return send(200,{app:appId,wallet,games:['food-wheel','jackpot-fruit'],
         todayWinnings24h:Number(winnings.rows[0].total),recentBets:recent.rows,
-        bettingEnabled:false});
+        bettingEnabled:process.env.AKIRA_GAME_ENGINE_ENABLED==='true'});
     } catch(err) {console.error('game_overview_failed',err.message);return send(503,{error:'games_unavailable'}); }
   }
   const roundMatch=url.pathname.match(/^\/api\/v1\/games\/(food-wheel|jackpot-fruit)\/round$/);
@@ -157,6 +157,8 @@ export const requestHandler = async (req, res) => {
     try {
       const user=await authenticate(req.headers.authorization);
       if(!user) return send(401,{error:'unauthorized'});
+      // Never debit coins while the result settlement engine is stopped.
+      if(process.env.AKIRA_GAME_ENGINE_ENABLED!=='true')return send(503,{error:'game_engine_disabled'});
       let raw='';
       for await (const chunk of req) {
         raw+=chunk;

@@ -1,0 +1,141 @@
+/* Real Akira room occupancy; no sample users, no local-only seat permissions. */
+(()=>{
+ const ctx=window.AkiraBridge?.getContext?.()||{};
+ if(!ctx.id||!ctx.voiceAuth||!/^\d{6,18}$/.test(String(ctx.id)))return;
+ const api=(ctx.voiceApi||'https://api.soverixnet.online').replace(/\/$/,'');
+ let localSeat=null,lastSnapshot=null,updating=false,stopped=false,first=true;
+ window.__akiraVoiceSeatActive=false;
+ const mic=document.getElementById('mic');
+ const notify=(message)=>{if(typeof window.toast==='function')window.toast(message)};
+ const currentId=String(ctx.userId||'');
+ const request=async(method,path,payload)=>{
+  const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),10000);
+  try{
+   const response=await fetch(api+'/api/v1/rooms/'+encodeURIComponent(ctx.id)+'/'+path,{
+    method,headers:{Authorization:'Bearer '+ctx.voiceAuth,...(payload?{'Content-Type':'application/json'}:{})},
+    body:payload?JSON.stringify(payload):undefined,signal:abort.signal,cache:'no-store'});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok)throw Error(data.error||'Room API '+response.status);
+   return data;
+  }finally{clearTimeout(timeout)}
+ };
+ const oldTick=window.tick;
+ window.tick=function(){
+  document.querySelectorAll('.seat').forEach(el=>el.classList.remove('talk'));
+ };
+ function draw(data){
+  if(!Array.isArray(data.seats)||![5,10,12].includes(Number(data.seatCount)))return;
+  lastSnapshot=data;
+  const incoming=Number(data.seatCount);
+  window.__akiraLiveRoomSeats=true;
+  const occupied=new Map(data.seats.map(s=>[Number(s.seatNo),s]));
+  localSeat=null;
+  const next=Array.from({length:incoming},(_,i)=>{
+   const u=occupied.get(i);
+   if(!u)return {empty:1,i,talk:false,muted:true};
+   if(String(u.publicId)===currentId)localSeat=i;
+   return {n:u.displayName||'User',e:'👤',id:String(u.publicId),i,muted:String(u.publicId)!==currentId||myMute,talk:false,real:true};
+  });
+  seats.splice(0,seats.length,...next);
+  S.n=incoming;
+  if(typeof data.name==='string')S.name=data.name;
+  if(data.themeKey&&TH.some(x=>x.id===data.themeKey))S.theme=data.themeKey;
+  window.__akiraVoiceSeatActive=localSeat!==null;
+  if(localSeat===null){myMute=true;}
+  mic.textContent=myMute?'🔇':'🎤';
+  mic.classList.toggle('off',myMute);
+  render();
+  applyTheme();
+  syncMic();
+ }
+ async function syncMic(){
+  if(!akiraVoiceRoom)return;
+  const allowed=window.__akiraVoiceSeatActive&&!myMute;
+  try{await akiraVoiceRoom.localParticipant.setMicrophoneEnabled(allowed)}
+  catch(e){myMute=true;mic.textContent='🔇';mic.classList.add('off');notify('Microphone permission needed')}
+ }
+ async function refresh(){
+  if(stopped||updating)return;
+  updating=true;
+  try{draw(await request('GET','seats'));first=false}
+  catch(e){if(first){first=false;notify('Room seats are not connected: '+e.message)}}
+  finally{updating=false}
+ }
+ async function actSeat(body){
+  try{
+   const state=await request('POST','seat',body);
+   myMute=body.leave===true;
+   draw(state);
+   if(!myMute){
+    if(!akiraVoiceRoom){akiraStartVoice();}
+    else await syncMic();
+   }
+   notify(body.leave===true?'Left microphone seat':'Seat joined — microphone on');
+  }catch(e){notify('Seat: '+e.message);await refresh()}
+ }
+ const sheet=window.seatSheet;
+ window.seatSheet=function(i){
+  if(!lastSnapshot){notify('Connecting real room seats');return}
+  const s=seats[i];
+  if(!s)return;
+  if(s.empty){
+   const ownerSeat=i===0;
+   if(ownerSeat!==!!window.__akiraIsOwner){notify('Only the room owner may use the owner seat');return}
+   open('<h3>Join microphone seat '+(i+1)+'</h3><div class="acts"><button class="act" id="akiraTakeSeat"><span>🎙️</span>Join and talk</button></div>');
+   document.getElementById('akiraTakeSeat').onclick=()=>{close();actSeat({seatNo:i})};
+  }else if(s.id===currentId){
+   open('<h3>Your microphone seat</h3><div class="acts"><button class="act" id="akiraLeaveSeat"><span>⬇️</span>Leave microphone</button></div>');
+   document.getElementById('akiraLeaveSeat').onclick=()=>{close();actSeat({leave:true})};
+  }else{
+   open('<h3>Occupied seat</h3><div class="who"><b>'+esc(s.n)+'</b><small> · ID '+esc(s.id)+'</small></div>');
+  }
+ };
+ mic.onclick=async()=>{
+  if(localSeat===null){notify('Tap an empty seat to talk');return}
+  myMute=!myMute;
+  mic.textContent=myMute?'🔇':'🎤';
+  mic.classList.toggle('off',myMute);
+  if(seats[localSeat])seats[localSeat].muted=myMute;
+  render();await syncMic();
+ };
+ // Server settings preserve the old theme interface but only owner can write it.
+ const oldSettings=window.settings;
+ document.getElementById('roomBtn').onclick=function(){
+  if(!window.__akiraIsOwner){
+   open('<h3>'+esc(lastSnapshot?.name||ctx.name||'Room')+'</h3><div class="lbl">Room settings are managed by the owner.</div>');
+   return;
+  }
+  oldSettings();
+  const save=document.getElementById('save');
+  if(save)save.onclick=async()=>{
+   save.disabled=true;
+   try{
+    const name=document.getElementById('nm')?.value?.trim()||S.name;
+    const updated=await request('POST','settings',{name,seatCount:seats.length,themeKey:S.theme});
+    draw(updated);close();notify('Room settings saved');
+   }catch(e){notify('Settings: '+e.message)}
+   finally{save.disabled=false}
+  };
+ };
+ // Reject deceptive local-only sends until gifts are backed by a server ledger.
+ document.addEventListener('click',e=>{
+  if(!e.target?.closest?.('#sheet #snd'))return;
+  e.preventDefault();e.stopImmediatePropagation();
+  notify('Gifts are unavailable until real wallet gifting is enabled.');
+ },true);
+ // Until an authenticated message service exists, do not misrepresent local chat as global.
+ document.getElementById('sendTxt')?.addEventListener('click',e=>{
+  e.preventDefault();e.stopImmediatePropagation();
+  notify('Live text chat is not yet connected.');
+ },true);
+ window.addEventListener('akira:voice-connected',syncMic);
+ window.addEventListener('akira:wallet-updated',()=>{
+  try{S.coins=window.parent.coins();lockUI()}catch{}
+ });
+ window.addEventListener('pagehide',()=>{stopped=true});
+ myMute=true;mic.classList.add('off');mic.textContent='🔇';
+ seats.splice(0,seats.length,...Array.from({length:10},(_,i)=>({empty:1,i,muted:true,talk:false})));
+ render();
+ refresh();
+ setInterval(refresh,4500);
+})();

@@ -17,9 +17,12 @@ async function roomForMember(db,userId,publicId,locked=false) {
 }
 async function listSeatSnapshot(db,room,publicId) {
  const {rows}=await db.query(snapshotSql,[room.id]);
+ const audience=await db.query(`SELECT u.public_id::text AS "publicId",u.display_name AS "displayName",u.avatar_url AS "avatarUrl"
+   FROM akira_room_members m JOIN akira_users u ON u.id=m.user_id
+   WHERE m.room_id=$1 ORDER BY m.joined_at LIMIT 200`,[room.id]);
  return {ok:true,roomId:String(publicId),seatCount:Number(room.seatCount),
    ownerId:String(room.ownerId),name:room.name,themeKey:room.themeKey||null,
-   seats:rows.map(({accountId,...data})=>data)};
+   seats:rows.map(({accountId,...data})=>data),members:audience.rows};
 }
 export async function roomSeats(user,publicId,pool=getPool()){
  if(!validRoom(publicId))return {status:400,body:{error:'invalid_room_id'}};

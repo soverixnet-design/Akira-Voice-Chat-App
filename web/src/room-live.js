@@ -156,6 +156,46 @@
   e.preventDefault();e.stopImmediatePropagation();
   notify('This room action needs server permissions and is not enabled yet.');
  },true);
+ // Moderation uses signed-in server requests, not local-only room flags.
+ const oldUserSheet=window.userSheet;
+ window.userSheet=function(u,q){
+  oldUserSheet(u,q);
+  if(!u?.id||String(u.id)===currentId)return;
+  const back=document.getElementById('ubk');
+  if(!back)return;
+  const buttons=document.createElement('div');buttons.className='acts';
+  const block=document.createElement('button');block.className='act';
+  block.textContent='🚫 Block user';
+  const report=document.createElement('button');report.className='act';
+  report.textContent='🛡️ Report user';
+  async function moderate(action,payload){
+   const response=await fetch(api+'/api/v1/users/'+action,{method:'POST',
+    headers:{Authorization:'Bearer '+ctx.voiceAuth,'Content-Type':'application/json'},
+    body:JSON.stringify({publicId:String(u.id),...payload})});
+   const data=await response.json().catch(()=>({}));
+   if(!response.ok)throw Error(data.error||'Moderation unavailable');
+   return data;
+  }
+  block.onclick=async()=>{
+   if(!confirm('Block ID '+u.id+'?'))return;
+   block.disabled=true;
+   try{await moderate('block',{blocked:true});notify('User blocked');close()}
+   catch(e){notify('Block: '+e.message);block.disabled=false}
+  };
+  report.onclick=()=>{
+   open('<h3>Report ID '+esc(String(u.id))+'</h3><div class="lbl">Reason</div><select class="field" id="akiraReportReason">'+
+    ['harassment','spam','fraud','inappropriate','other'].map(x=>'<option value="'+x+'">'+x+'</option>').join('')+
+    '</select><textarea class="field" id="akiraReportDetails" maxlength="500" placeholder="What happened?"></textarea>'+
+    '<button class="send" id="akiraReportSubmit">Submit report</button>');
+   document.getElementById('akiraReportSubmit').onclick=async()=>{
+    const send=document.getElementById('akiraReportSubmit');send.disabled=true;
+    try{await moderate('report',{reason:document.getElementById('akiraReportReason').value,details:document.getElementById('akiraReportDetails').value});
+     close();notify('Report submitted for admin review')}
+    catch(e){notify('Report: '+e.message);send.disabled=false}
+   };
+  };
+  buttons.append(block,report);back.insertAdjacentElement('beforebegin',buttons);
+ };
  window.addEventListener('akira:voice-connected',syncMic);
  window.addEventListener('akira:wallet-updated',()=>{
   try{S.coins=window.parent.coins();lockUI()}catch{}

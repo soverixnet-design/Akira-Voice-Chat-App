@@ -29,8 +29,16 @@
   root.querySelector('.gameClose').addEventListener('click',close);
   root.querySelector('.gameShade').addEventListener('click',close);
   window.addEventListener('message',e=>{
-    if(e.origin!==location.origin || e.source!==document.getElementById('rf')?.contentWindow)return;
-    if(e.data?.type==='akira:open-game')open(e.data.game);
+    if(e.origin!==location.origin)return;
+    if(e.source===frame.contentWindow && e.data?.type==='akira:game-ready'){
+      frame.contentWindow.postMessage({type:'akira:game-auth',token:akiraToken()},location.origin);
+      return;
+    }
+    if(e.source===frame.contentWindow && e.data?.type==='akira:wallet-updated'){
+      window.dispatchEvent(new Event('akira:wallet-updated'));
+      return;
+    }
+    if(e.source===document.getElementById('rf')?.contentWindow && e.data?.type==='akira:open-game')open(e.data.game);
   });
   document.getElementById('qg')?.addEventListener('click',()=>open('food-wheel'));
   window.AkiraGameOverlay={open,close};

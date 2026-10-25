@@ -381,7 +381,7 @@ async function doSignup(){
   var name=$("an").value.trim(),key=norm($("aid").value),pw=$("apw").value,c=$("ac").value,dd=+$("ad").value,mm=$("am").value,yy=+$("ay").value;
   if(name.length<2)return aerr("Enter at least 2 characters for the name");
   if(!validIdent(key))return aerr("Enter a valid email or phone number");
-  if(pw.length<6)return aerr("Password must be at least 12 characters");
+  if(pw.length<12)return aerr("Password must be at least 12 characters");
   if(pw!==$("apw2").value)return aerr("Passwords do not match");
   if(!c)return aerr("Select country");
   if(!dd||mm===""||!yy)return aerr("Select day, month and year of birth");
@@ -411,7 +411,7 @@ function settingsSheet(){
   if($("su"))$("su").onclick=function(){closeSheet();showAuth("signup")};
 }
 function logout(){
-  syncAcct();var oldToken=akiraToken();if(oldToken)akiraRequest("/auth/logout","POST",undefined,oldToken).catch(function(){});try{localStorage.removeItem(AKIRA_TOKEN_KEY);localStorage.removeItem(SESS_K);localStorage.removeItem("vr_state_v2");localStorage.removeItem("vr_guest")}catch(e){}
+  syncAcct();var oldToken=akiraToken();if(oldToken)akiraRequest("/api/v1/auth/logout","POST",undefined,oldToken).catch(function(){});try{localStorage.removeItem(AKIRA_TOKEN_KEY);localStorage.removeItem(SESS_K);localStorage.removeItem("vr_state_v2");localStorage.removeItem("vr_guest")}catch(e){}
   A={name:"Me",id:String(20000000+Math.floor(Math.random()*79999999)),pic:null,myRoom:null,claim:{d:"",streak:0}};
   try{localStorage.setItem("vr_app_v1",JSON.stringify(A))}catch(e){}
   fixA();closeSheet();leaveRoom();refresh();renderRooms();go("home");showAuth("welcome");

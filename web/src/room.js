@@ -302,7 +302,7 @@ function seatEmoji(idx,e){
     s.animate([{transform:"translate("+(cx+(k-2)*8)+"px,"+(cy-sz/2)+"px) translate(-50%,-50%) scale(.5)",opacity:0},{opacity:1,offset:.2},{transform:"translate("+(cx+dx)+"px,"+(cy-sz/2-56-k*7)+"px) translate(-50%,-50%) scale(1.1)",opacity:0}],{duration:1300,delay:350+k*140,easing:"ease-out",fill:"both"}).onfinish=function(){this.effect.target.remove()};}
 }
 var UN=["Arif","Sumi","Hasan","Lima","Ronnie","Jui","Shakil","Tamanna","Emon","Nazma","Rifat","Pinky","Sohel","Mou","Zahid","Rumi","Nayan","Shiuli","Kamal","Rain"],UE=["🧑","👩","🧔","👧","🧑‍💻","👩‍🎓","🧑‍🚀","👩‍🍳","🧑‍🔧","👩‍⚕️","😎","🧑‍🎤"],U=[],FOL={};
-function sid(s){return s.i===0?$("rid").textContent:String(20000000+(s.n.charCodeAt(0)*7919+s.i*104729)%9000000)}
+function sid(s){if(s.real&&s.id)return String(s.id);return s.i===0?$("rid").textContent:String(20000000+(s.n.charCodeAt(0)*7919+s.i*104729)%9000000)}
 function total(){return seats.filter(function(s){return !s.empty&&!s.lock}).length+U.length}
 function usersSheet(q){
   open('<h3>👥 You are in a room <span id="utt">'+bn(total())+'</span> people</h3><input class="field" id="uq" placeholder="Search by name or ID" autocomplete="off"><div class="ul" id="ul"></div>');

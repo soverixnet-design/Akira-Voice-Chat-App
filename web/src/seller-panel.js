@@ -10,6 +10,7 @@
    const wallet=document.querySelector('#v-me #wr');
    if(wallet && open.previousElementSibling!==wallet){
      wallet.insertAdjacentElement('afterend',open);
+     refresh();
    }
    if(!wallet && open.parentElement!==document.body){
      open.style.display='none';
@@ -27,7 +28,7 @@
  document.body.appendChild(box);
  const q=id=>document.getElementById(id);
  const request=async(path,method='GET',data)=>{const r=await fetch(api+path,{method,headers:{Authorization:'Bearer '+token(),...(data?{'Content-Type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})});const j=await r.json();if(!r.ok)throw Error(j.error||'Request failed');return j;};
- async function refresh(){if(!token()){open.style.display='none';return;}try{const r=await request('/api/v1/seller/wallet');open.style.display='block';q('akiraSellerBalance').textContent=Number(r.wallet.balance).toLocaleString();}catch{open.style.display='none';}}
+ async function refresh(){if(!token()){open.style.display='none';return;}try{const r=await request('/api/v1/seller/wallet');open.style.display=document.querySelector('#v-me #wr')?.parentElement===open.parentElement?'block':'none';q('akiraSellerBalance').textContent=Number(r.wallet.balance).toLocaleString();}catch{open.style.display='none';}}
  open.onclick=()=>{box.classList.add('open');refresh();};q('akiraSellerClose').onclick=()=>box.classList.remove('open');
  q('akiraSellerSend').onclick=async()=>{const id=q('akiraSellerUser').value.trim(),amount=Number(q('akiraSellerAmount').value),status=q('akiraSellerStatus'),btn=q('akiraSellerSend');
  if(!/^\d{6}$/.test(id)||!Number.isSafeInteger(amount)||amount<=0){status.textContent='Enter valid 6-digit ID and coin amount.';return;}

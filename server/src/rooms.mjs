@@ -45,8 +45,14 @@ export async function joinRoom(user, publicId) {
 }
 
 export async function leaveRoom(user, publicId) {
-  const {rows} = await getPool().query('SELECT id FROM akira_rooms WHERE public_id=$1',[publicId]);
-  if (!rows[0]) return {status:404,body:{error:'room_not_found'}};
-  await getPool().query('DELETE FROM akira_room_members WHERE room_id=$1 AND user_id=$2',[rows[0].id,user.id]);
-  return {status:200,body:{ok:true,app:'akira',roomId:String(publicId),joined:false}};
+  const db=await getPool().connect();
+  try{
+    await db.query('BEGIN');
+    const {rows}=await db.query('SELECT id FROM akira_rooms WHERE public_id=$1 FOR UPDATE',[publicId]);
+    if(!rows.length){await db.query('ROLLBACK');return {status:404,body:{error:'room_not_found'}}}
+    await db.query('DELETE FROM akira_room_seats WHERE room_id=$1 AND user_id=$2',[rows[0].id,user.id]);
+    await db.query('DELETE FROM akira_room_members WHERE room_id=$1 AND user_id=$2',[rows[0].id,user.id]);
+    await db.query('COMMIT');
+    return {status:200,body:{ok:true,app:'akira',roomId:String(publicId),joined:false}};
+  }catch(err){await db.query('ROLLBACK');throw err}finally{db.release()}
 }

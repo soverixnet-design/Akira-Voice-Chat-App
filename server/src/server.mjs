@@ -274,6 +274,16 @@ export const requestHandler = async (req, res) => {
     try { const room = await getRoom(roomMatch[1]); return room ? send(200, { app: appId, room }) : send(404, { error: 'room_not_found', app: appId }); }
     catch (err) { console.error('room_read_failed', err.message); return send(503, { error: 'database_unavailable', app: appId }); }
   }
+  if (req.method==='GET' && url.pathname==='/api/v1/users/blocks'){
+    try{
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      const {rows}=await getPool().query(
+        'SELECT u.public_id::text AS "publicId" FROM akira_user_blocks b JOIN akira_users u ON u.id=b.blocked_id WHERE b.blocker_id=$1',
+        [user.id]);
+      return send(200,{blockedIds:rows.map(r=>r.publicId)});
+    }catch(err){console.error('user_blocks_failed',err.message);return send(503,{error:'blocks_unavailable'})}
+  }
   if (req.method==='POST' && ['/api/v1/users/report','/api/v1/users/block'].includes(url.pathname)){
     try{
       const user=await authenticate(req.headers.authorization);

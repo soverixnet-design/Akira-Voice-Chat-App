@@ -274,6 +274,48 @@ export const requestHandler = async (req, res) => {
     try { const room = await getRoom(roomMatch[1]); return room ? send(200, { app: appId, room }) : send(404, { error: 'room_not_found', app: appId }); }
     catch (err) { console.error('room_read_failed', err.message); return send(503, { error: 'database_unavailable', app: appId }); }
   }
+  if (req.method==='POST' && ['/api/v1/users/report','/api/v1/users/block'].includes(url.pathname)){
+    try{
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>3072)return send(413,{error:'payload_too_large'})}
+      let body;try{body=JSON.parse(raw)}catch{return send(400,{error:'invalid_json'})}
+      const targetId=String(body?.publicId??'');
+      if(!/^\d{6}$/.test(targetId))return send(400,{error:'invalid_target_id'});
+      const {rows}=await getPool().query('SELECT id FROM akira_users WHERE public_id=$1 AND is_banned=false',[targetId]);
+      if(!rows.length)return send(404,{error:'user_not_found'});
+      const target=rows[0].id;
+      if(String(target)===String(user.id))return send(400,{error:'cannot_report_or_block_self'});
+      if(url.pathname.endsWith('/block')){
+        if(typeof body.blocked!=='boolean')return send(400,{error:'invalid_block_action'});
+        if(body.blocked){
+          await getPool().query('INSERT INTO akira_user_blocks(blocker_id,blocked_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[user.id,target]);
+        }else{
+          await getPool().query('DELETE FROM akira_user_blocks WHERE blocker_id=$1 AND blocked_id=$2',[user.id,target]);
+        }
+        return send(200,{ok:true,publicId:targetId,blocked:body.blocked});
+      }
+      const reason=body.reason,details=body.details??'';
+      if(!['harassment','spam','fraud','inappropriate','other'].includes(reason)||
+         typeof details!=='string'||details.length>500)
+        return send(400,{error:'invalid_report'});
+      const recent=await getPool().query("SELECT 1 FROM akira_user_reports WHERE reporter_id=$1 AND reported_user_id=$2 AND created_at>now()-interval '24 hours' LIMIT 1",[user.id,target]);
+      if(recent.rows.length)return send(409,{error:'report_already_submitted'});
+      await getPool().query('INSERT INTO akira_user_reports(reporter_id,reported_user_id,reason,details) VALUES($1,$2,$3,$4)',[user.id,target,reason,details.trim()]);
+      return send(201,{ok:true,reviewStatus:'open'});
+    }catch(err){console.error('user_safety_failed',err.message);return send(503,{error:'moderation_unavailable'})}
+  }
+  if (req.method==='GET' && url.pathname==='/api/v1/admin/reports'){
+    try{
+      const admin=await requireAdmin(req.headers.authorization);
+      if(admin.error)return send(admin.status,{error:admin.error});
+      const {rows}=await getPool().query(`SELECT r.id,r.reason,r.details,r.status,r.created_at AS "createdAt",
+        u.public_id::text AS "reportedId",s.public_id::text AS "reporterId"
+        FROM akira_user_reports r JOIN akira_users u ON u.id=r.reported_user_id
+        JOIN akira_users s ON s.id=r.reporter_id ORDER BY r.created_at DESC LIMIT 100`);
+      return send(200,{reports:rows});
+    }catch(err){console.error('report_queue_failed',err.message);return send(503,{error:'moderation_unavailable'})}
+  }
   if (url.pathname === '/api/v1/account/deletion-request' && req.method === 'POST') {
     try {
       const user=await authenticate(req.headers.authorization);

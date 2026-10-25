@@ -88,5 +88,55 @@ try{
     results.push({width:390,height:844,status:'seller_wallet_passed'});
     await page.close();
   }
+
+  // Connected admin interface: mocked authenticated API; no production admin operations.
+  {
+    const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
+    const errors=[],operations=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    await page.route('https://api.soverixnet.online/**',async route=>{
+      const req=route.request(),path=new URL(req.url()).pathname;
+      const headers={'access-control-allow-origin':'http://127.0.0.1:4174','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'GET, POST, OPTIONS'};
+      if(req.method()==='OPTIONS')return route.fulfill({status:204,headers});
+      const body=req.postDataJSON?.()||{};
+      operations.push({path,method:req.method(),body});
+      const payload=path==='/api/v1/auth/login'?{token:'A'.repeat(43)}:
+        path==='/api/v1/admin/dashboard'?{role:'super_admin',stats:{users:17,rooms:3}}:
+        path==='/api/v1/sellers'?{sellers:[{publicId:'100012',displayName:'Approved Seller'}]}:
+        path==='/api/v1/admin/sellers/status'?{ok:true,publicId:body.publicId,enabled:body.enabled}:
+        path==='/api/v1/admin/sellers/allocate'?{status:200,balance:300}:
+        path==='/api/v1/admin/wallet/recharge'?{ok:true,wallet:{balance:7800}}:
+        path==='/api/v1/admin/users/search'?{user:{public_id:'100012',display_name:'Approved Seller',country_code:'BD'}}:
+        path==='/api/v1/admin/users'?{users:[]}:
+        path==='/api/v1/admin/roles'?{roles:[]}:
+        path==='/api/v1/admin/audit'?{events:[]}:
+        path==='/api/v1/rooms'?{rooms:[]}:{ok:true};
+      await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(payload)});
+    });
+    await page.goto('http://127.0.0.1:4174/admin-connected.html');
+    await page.locator('input[type=email]').fill('admin@example.com');
+    await page.locator('input[type=password]').fill('not-a-real-password');
+    await page.getByRole('button',{name:'Sign In'}).click();
+    await page.locator('[data-page="sellers"]').waitFor({state:'visible'});
+    await page.locator('[data-page="sellers"]').click();
+    const sellerCard=page.locator('section.card').filter({hasText:'Seller permissions'});
+    await sellerCard.locator('input').fill('100012');
+    page.once('dialog',dialog=>dialog.accept());
+    await sellerCard.getByRole('button',{name:'Disable seller'}).click();
+    await page.getByText('Seller disabled.').waitFor();
+    assert(operations.some(x=>x.path==='/api/v1/admin/sellers/status' && x.body.publicId==='100012' && x.body.enabled===false));
+    await page.locator('[data-page="recharge"]').click();
+    const recharge=page.locator('section.card').filter({hasText:'Credit original user wallet'});
+    await recharge.locator('input').nth(0).fill('100012');
+    await recharge.locator('input').nth(1).fill('50');
+    page.once('dialog',dialog=>dialog.accept());
+    await recharge.getByRole('button',{name:'Credit wallet'}).click();
+    await page.getByText(/Wallet credited/).waitFor();
+    assert(operations.some(x=>x.path==='/api/v1/admin/wallet/recharge'&&x.body.publicId==='100012'&&x.body.amount===50));
+    assert.deepEqual(errors,[]);
+    results.push({width:390,height:844,status:'admin_connected_passed'});
+    console.log('PASS connected admin controls at 390x844');
+    await page.close();
+  }
   await writeFile('test-results/browser.json',JSON.stringify(results,null,2));
 }finally{await browser.close();server.kill()}

@@ -1,5 +1,6 @@
 import { getWallet, walletHistory, applyWalletDelta } from './wallet.mjs';
 import { sellerBalance, sellerCredit, sellerSend } from './seller-wallet.mjs';
+import { setSellerStatus } from './seller-admin.mjs';
 import { placeGameBet } from './game-bets.mjs';
 import { startGameEngine } from './game-engine.mjs';
 import { profileRoutes } from './profiles.mjs';
@@ -67,7 +68,7 @@ export const requestHandler = async (req, res) => {
       return send(200,{sellers:rows});
     } catch(err) {console.error('seller_list_failed',err.message);return send(503,{error:'seller_list_unavailable'});}
   }
-  if (['/api/v1/seller/wallet','/api/v1/seller/transfer','/api/v1/seller/history','/api/v1/admin/sellers/allocate'].includes(url.pathname)) {
+  if (['/api/v1/seller/wallet','/api/v1/seller/transfer','/api/v1/seller/history','/api/v1/admin/sellers/allocate','/api/v1/admin/sellers/status'].includes(url.pathname)) {
     try {
       if (url.pathname==='/api/v1/admin/sellers/allocate') {
         if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
@@ -77,6 +78,16 @@ export const requestHandler = async (req, res) => {
         let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
         let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'invalid_json'});}
         const result=await sellerCredit(admin.user.id,body.publicId,body.amount,body.requestId);
+        return send(result.status,result);
+      }
+      if (url.pathname==='/api/v1/admin/sellers/status') {
+        if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+        const admin=await requireAdmin(req.headers.authorization);
+        if(admin.error)return send(admin.status,{error:admin.error});
+        if(admin.role!=='super_admin')return send(403,{error:'super_admin_required'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+        let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'invalid_json'});}
+        const result=await setSellerStatus(admin.user.id,body?.publicId,body?.enabled);
         return send(result.status,result);
       }
       const user=await authenticate(req.headers.authorization);

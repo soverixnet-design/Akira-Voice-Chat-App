@@ -19,10 +19,10 @@
   const frame=root.querySelector('iframe');
   function close(){root.classList.remove('open');frame.src='about:blank';}
   function open(game){
-    if(game!=='food-wheel'){if(typeof toast==='function')toast('Game is not yet available');return;}
+    if(!['food-wheel','jackpot-fruit'].includes(game)){if(typeof toast==='function')toast('Game is not yet available');return;}
     const inRoom=!!document.getElementById('rw')?.classList.contains('on');
     root.classList.toggle('inRoom',inRoom);
-    root.querySelector('.gameTitle').textContent='🎡 Food Wheel';
+    root.querySelector('.gameTitle').textContent=game==='food-wheel'?'🎡 Food Wheel':'🎰 Jackpot Fruit';
     frame.src='game-live.html?game='+encodeURIComponent(game);
     root.classList.add('open');
   }

@@ -10,7 +10,7 @@
    const wallet=document.querySelector('#v-me #wr');
    if(wallet && open.previousElementSibling!==wallet){
      wallet.insertAdjacentElement('afterend',open);
-     refresh();
+     queueMicrotask(refresh);
    }
    if(!wallet && open.parentElement!==document.body){
      open.style.display='none';

@@ -5,12 +5,12 @@ export async function sellerBalance(userId) {
  const {rows}=await getPool().query('SELECT balance,enabled FROM akira_seller_wallets WHERE user_id=$1',[userId]);
  return rows[0]?{balance:Number(rows[0].balance),enabled:rows[0].enabled}:null;
 }
-export async function sellerCredit(adminId,publicId,amount,requestId) {
+export async function sellerCredit(adminId,publicId,amount,requestId,pool=null) {
  if(!validId(publicId)||!Number.isSafeInteger(amount)||amount<=0||!validReq(requestId))return {status:400,error:'invalid_allocation'};
- const db=await getPool().connect();
+ const db=await (pool||getPool()).connect();
  try{
   await db.query('BEGIN');
-  const u=await db.query('SELECT id FROM akira_users WHERE public_id=$1',[publicId]);
+  const u=await db.query('SELECT id FROM akira_users WHERE public_id=$1 AND is_banned=false',[publicId]);
   if(!u.rows.length){await db.query('ROLLBACK');return {status:404,error:'seller_not_found'};}
   const sellerId=u.rows[0].id;
   await db.query('INSERT INTO akira_seller_wallets(user_id) VALUES($1) ON CONFLICT DO NOTHING',[sellerId]);
@@ -24,15 +24,15 @@ export async function sellerCredit(adminId,publicId,amount,requestId) {
   await db.query('COMMIT');return {status:200,balance:next,duplicate:false};
  }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
 }
-export async function sellerSend(sellerId,publicId,amount,requestId){
+export async function sellerSend(sellerId,publicId,amount,requestId,pool=null){
  if(!validId(publicId)||!Number.isSafeInteger(amount)||amount<=0||!validReq(requestId))return {status:400,error:'invalid_transfer'};
- const db=await getPool().connect();
+ const db=await (pool||getPool()).connect();
  try{
   await db.query('BEGIN');
   const seller=await db.query('SELECT balance,enabled FROM akira_seller_wallets WHERE user_id=$1 FOR UPDATE',[sellerId]);
   if(!seller.rows.length||!seller.rows[0].enabled){await db.query('ROLLBACK');return {status:403,error:'seller_not_enabled'};}
   const prior=await db.query('SELECT recipient_id,amount FROM akira_seller_transfers WHERE seller_id=$1 AND request_id=$2',[sellerId,requestId]);
-  const recipient=await db.query('SELECT id FROM akira_users WHERE public_id=$1',[publicId]);
+  const recipient=await db.query('SELECT id FROM akira_users WHERE public_id=$1 AND is_banned=false',[publicId]);
   if(!recipient.rows.length){await db.query('ROLLBACK');return {status:404,error:'recipient_not_found'};}
   const recipientId=recipient.rows[0].id;
   if(prior.rows.length){await db.query('COMMIT');return String(prior.rows[0].recipient_id)===String(recipientId)&&Number(prior.rows[0].amount)===amount?{status:200,duplicate:true,balance:Number(seller.rows[0].balance)}:{status:409,error:'request_id_conflict'};}

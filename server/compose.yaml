@@ -10,6 +10,7 @@ services:
       PGUSER: akira
       PGDATABASE: akira_db
       PGPASSWORD_FILE: /run/secrets/db_password
+      AKIRA_ALLOWED_ORIGINS: "${AKIRA_ALLOWED_ORIGINS:-https://api.soverixnet.online,https://voice.soverixnet.online,https://localhost,capacitor://localhost}"
     volumes:
       - /opt/akira/secrets/postgres_password:/run/secrets/db_password:ro
     ports:

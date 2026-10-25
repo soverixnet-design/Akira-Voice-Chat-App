@@ -120,7 +120,7 @@ try{
     await page.getByRole('button',{name:'☰'}).click();
     await page.locator('nav#nv [data-page="sellers"]').click();
     const sellerCard=page.locator('section.card').filter({hasText:'Seller permissions'});
-    await sellerCard.locator('input').fill('100012');
+    await sellerCard.getByRole('textbox',{name:'Seller 6-digit User ID'}).fill('100012');
     page.once('dialog',dialog=>dialog.accept());
     await sellerCard.getByRole('button',{name:'Disable seller'}).click();
     await page.getByText('Seller disabled.').waitFor();

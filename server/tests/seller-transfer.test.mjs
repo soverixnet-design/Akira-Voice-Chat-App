@@ -73,3 +73,17 @@ test('invalid amounts and identifiers never start a transaction',async()=>{
  assert.equal((await sellerCredit('1','100004',-1,req,f.pool)).status,400);
  assert.equal(f.calls.length,0);
 });
+
+test('allocating inventory never grants seller access or overrides disabled status',async()=>{
+ const f=fixture({sellerBalance:30});
+ const result=await sellerCredit('9','100004',25,req,f.pool);
+ assert.equal(result.status,200);
+ assert.equal(result.balance,55);
+ const walletInsert=f.calls.find(x=>x.sql.startsWith('INSERT INTO akira_seller_wallets'));
+ assert.equal(walletInsert.sql.includes('enabled'),true);
+ assert.equal(walletInsert.sql.includes('false'),true);
+ const update=f.calls.find(x=>x.sql.startsWith('UPDATE akira_seller_wallets'));
+ assert.equal(update.args[1],55);
+ assert.doesNotMatch(update.sql,/enabled\s*=/);
+ assert.equal(f.calls.at(-1).sql,'COMMIT');
+});

@@ -10,6 +10,7 @@ import { listRooms, getRoom, getPool } from './database.mjs';
 import { register, login, authenticate, logout, profile } from './auth.mjs';
 import { randomUUID, createHmac } from 'node:crypto';
 import { createRoom, joinRoom, leaveRoom } from './rooms.mjs';
+import {roomSeats,setSeat,updateRoomSettings} from './room-seats.mjs';
 import { pathToFileURL } from 'node:url';
 
 const port = Number(process.env.PORT || 4301);
@@ -211,6 +212,24 @@ export const requestHandler = async (req, res) => {
       await logout(req.headers.authorization);
       return send(200,{ok:true,app:appId});
     } catch(err) { console.error('logout_failed',err.message); return send(503,{error:'auth_unavailable'}); }
+  }
+  const roomSeatRoute=url.pathname.match(/^\/api\/v1\/rooms\/(\d{6,18})\/(seats|seat|settings)$/);
+  if(roomSeatRoute){
+    try{
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      const [,roomId,action]=roomSeatRoute;
+      if(action==='seats' && req.method==='GET'){
+        const result=await roomSeats(user,roomId);
+        return send(result.status,result.body);
+      }
+      if(req.method!=='POST'||action==='seats')return send(405,{error:'method_not_allowed'});
+      let raw='';
+      for await (const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+      let body;try{body=JSON.parse(raw)}catch{return send(400,{error:'invalid_json'})}
+      const result=action==='seat'?await setSeat(user,roomId,body):await updateRoomSettings(user,roomId,body);
+      return send(result.status,result.body);
+    }catch(e){console.error('room_seat_failed',e.code||e.message);return send(503,{error:'room_seats_unavailable'})}
   }
   const roomWrite = req.method === 'POST' && (url.pathname === '/api/v1/rooms' || /^\/api\/v1\/rooms\/\d{1,18}\/(join|leave)$/.test(url.pathname));
   if (roomWrite) {

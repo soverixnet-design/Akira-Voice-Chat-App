@@ -13,13 +13,13 @@ export async function sellerCredit(adminId,publicId,amount,requestId,pool=null) 
   const u=await db.query('SELECT id FROM akira_users WHERE public_id=$1 AND is_banned=false',[publicId]);
   if(!u.rows.length){await db.query('ROLLBACK');return {status:404,error:'seller_not_found'};}
   const sellerId=u.rows[0].id;
-  await db.query('INSERT INTO akira_seller_wallets(user_id) VALUES($1) ON CONFLICT DO NOTHING',[sellerId]);
+  await db.query('INSERT INTO akira_seller_wallets(user_id,enabled) VALUES($1,false) ON CONFLICT DO NOTHING',[sellerId]);
   const lock=await db.query('SELECT balance FROM akira_seller_wallets WHERE user_id=$1 FOR UPDATE',[sellerId]);
   const prior=await db.query('SELECT seller_id,amount FROM akira_seller_allocations WHERE admin_id=$1 AND request_id=$2',[adminId,requestId]);
   if(prior.rows.length){await db.query('COMMIT');return String(prior.rows[0].seller_id)===String(sellerId)&&Number(prior.rows[0].amount)===amount?{status:200,balance:Number(lock.rows[0].balance),duplicate:true}:{status:409,error:'request_id_conflict'};}
   const next=Number(lock.rows[0].balance)+amount;
   if(!Number.isSafeInteger(next))throw Error('balance_overflow');
-  await db.query('UPDATE akira_seller_wallets SET balance=$2,enabled=true,updated_at=now() WHERE user_id=$1',[sellerId,next]);
+  await db.query('UPDATE akira_seller_wallets SET balance=$2,updated_at=now() WHERE user_id=$1',[sellerId,next]);
   await db.query('INSERT INTO akira_seller_allocations(seller_id,admin_id,amount,request_id) VALUES($1,$2,$3,$4)',[sellerId,adminId,amount,requestId]);
   await db.query('COMMIT');return {status:200,balance:next,duplicate:false};
  }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}

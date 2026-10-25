@@ -168,16 +168,47 @@ if 'src="src/room-live.js"' not in s:
     p.write_text(s)
 PY
 
-# Never replace local LiveKit, Docker, database or other Compose configuration.
-python3 - "$ROOT/server/compose.yaml" "$ORIGINS" <<'PY'
+# Read effective Compose and running API origins, then preserve them while adding
+# the four required app origins. Previously the script kept a too-narrow existing
+# AKIRA_ALLOWED_ORIGINS value, causing public API requests to return HTTP 403.
+python3 - "$ROOT/server/compose.yaml" "$ROOT/server" "$ORIGINS" <<'PY'
 from pathlib import Path
-import sys
-p=Path(sys.argv[1]); s=p.read_text()
-if 'AKIRA_ALLOWED_ORIGINS:' not in s:
-    a='      PORT: "4301"'
-    if a not in s: raise RuntimeError('Compose PORT not as expected; manual merge required')
-    s=s.replace(a,a+'\n      AKIRA_ALLOWED_ORIGINS: "'+sys.argv[2]+'"',1)
-    p.write_text(s)
+import json,re,subprocess,sys
+p=Path(sys.argv[1]);directory=sys.argv[2];required=sys.argv[3].split(',')
+prefix=['docker','compose','-f',str(p),'--project-directory',directory]
+raw=p.read_text()
+config=json.loads(subprocess.check_output(prefix+['config','--format','json'],text=True))
+service=config.get('services',{}).get('akira-api',{})
+environment=service.get('environment') or {}
+if not isinstance(environment,dict):
+    raise RuntimeError('Unexpected Compose environment format; refusing to guess')
+configured=str(environment.get('AKIRA_ALLOWED_ORIGINS') or '')
+running=''
+cid=subprocess.check_output(prefix+['ps','-q','akira-api'],text=True).strip()
+if cid:
+    data=json.loads(subprocess.check_output(['docker','inspect',cid],text=True))[0]
+    for item in data.get('Config',{}).get('Env',[]):
+        if item.startswith('AKIRA_ALLOWED_ORIGINS='):
+            running=item.partition('=')[2]
+            break
+values=[v.strip() for group in (configured,running,','.join(required)) for v in group.split(',') if v.strip()]
+origins=list(dict.fromkeys(values))
+assert all(x in origins for x in required),'Missing required app origin'
+value=json.dumps(','.join(origins))
+if 'AKIRA_ALLOWED_ORIGINS:' in raw:
+    raw,count=re.subn(r'^      AKIRA_ALLOWED_ORIGINS:[^\n]*$',lambda _: '      AKIRA_ALLOWED_ORIGINS: '+value,
+                      raw,count=1,flags=re.MULTILINE)
+    if count!=1: raise RuntimeError('Unexpected Compose CORS layout; manual review required')
+else:
+    marker='      PORT: "4301"'
+    if marker not in raw: raise RuntimeError('Unexpected Compose PORT layout; manual review required')
+    raw=raw.replace(marker,marker+'\n      AKIRA_ALLOWED_ORIGINS: '+value,1)
+p.write_text(raw)
+future=json.loads(subprocess.check_output(prefix+['config','--format','json'],text=True))
+effective=str(future['services']['akira-api']['environment']['AKIRA_ALLOWED_ORIGINS']).split(',')
+if not all(x in effective for x in required):
+    raise RuntimeError('API app origins still incomplete; refusing to restart')
+print('PASS: All required browser and Capacitor app origins are in Compose config.')
 PY
 # Never silently lose live LiveKit credentials or game-engine configuration.
 # The running container and proposed Compose config must agree on these values.
@@ -211,6 +242,11 @@ for attempt in $(seq 1 20); do
   sleep 1
 done
 [[ "$LIVE_READY" == 1 ]] || { echo 'Live API health failed'; exit 1; }
+echo '=== CHECK RESTARTED API DIRECTLY FROM ITS CONTAINER ==='
+LIVE_CONTAINER="$(docker compose -f "$ROOT/server/compose.yaml" --project-directory "$ROOT/server" ps -q akira-api)"
+[[ -n "$LIVE_CONTAINER" ]] || { echo 'Akira API container is not running'; exit 1; }
+docker exec -i -e AKIRA_API_BASE=http://127.0.0.1:4301 "$LIVE_CONTAINER" node --input-type=module - < "$REVIEW/scripts/smoke-prod.mjs"
+echo '=== CHECK THE SAME ORIGINS THROUGH THE PUBLIC HTTPS PROXY ==='
 node "$REVIEW/scripts/smoke-prod.mjs"
 echo '=== VERIFY NEW WEB FILES ARE SERVED ==='
 WEB_ORIGIN="${AKIRA_WEB_ORIGIN:-https://api.soverixnet.online/app}"

@@ -31,6 +31,8 @@ jobs:
           node --check web/src/seller-panel.js
           node --check web/src/seller-directory.js
           node --check scripts/smoke-prod.mjs
+      - name: Check staging and deployment shell syntax
+        run: bash -n scripts/deploy-akira-seller-safe.sh
       - name: Run unit and regression tests
         working-directory: server
         run: npm test

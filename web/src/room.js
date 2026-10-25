@@ -42,7 +42,8 @@ async function akiraStartVoice(){
     });
     await room.connect(data.url,data.token);
     akiraVoiceRoom=room;
-    await room.localParticipant.setMicrophoneEnabled(!myMute);
+    await room.localParticipant.setMicrophoneEnabled(!myMute && window.__akiraVoiceSeatActive===true);
+    window.dispatchEvent(new Event('akira:voice-connected'));
     akiraVoiceReady=true;
     toast("Live voice connected");
   }catch(err){toast("Voice: "+(err.message||"connection failed"))}

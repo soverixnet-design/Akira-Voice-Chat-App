@@ -33,6 +33,19 @@ jobs:
           node --check scripts/smoke-prod.mjs
       - name: Check staging and deployment shell syntax
         run: bash -n scripts/deploy-akira-seller-safe.sh
+      - name: Check embedded Python syntax in deployment
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s=Path('scripts/deploy-akira-seller-safe.sh').read_text()
+          blocks=re.findall(r"<<'PY'\n(.*?)\nPY",s,re.DOTALL)
+          assert len(blocks)>=4, f'Expected Python deployment blocks, got {len(blocks)}'
+          for i,src in enumerate(blocks):
+              compile(src,f'deploy-block-{i+1}','exec')
+          print(f'PASS: {len(blocks)} embedded Python blocks compile')
+          PY
+
       - name: Run unit and regression tests
         working-directory: server
         run: npm test

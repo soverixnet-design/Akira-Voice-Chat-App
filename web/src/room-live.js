@@ -5,6 +5,14 @@
  const api=(ctx.voiceApi||'https://api.soverixnet.online').replace(/\/$/,'');
  let localSeat=null,lastSnapshot=null,updating=false,stopped=false,first=true;
  window.__akiraVoiceSeatActive=false;
+ window.__akiraBlockedIds=new Set();
+ fetch(api+'/api/v1/users/blocks',{headers:{Authorization:'Bearer '+ctx.voiceAuth}})
+  .then(r=>r.ok?r.json():Promise.reject(Error('blocks_unavailable')))
+  .then(data=>{window.__akiraBlockedIds=new Set((data.blockedIds||[]).map(String));
+   document.querySelectorAll('[data-akira-voice-user]').forEach(el=>{
+    if(window.__akiraBlockedIds.has(el.dataset.akiraVoiceUser)){el.pause?.();el.remove()}
+   });
+  }).catch(err=>console.warn('Block list unavailable:',err.message));
  const mic=document.getElementById('mic');
  const notify=(message)=>{if(typeof window.toast==='function')window.toast(message)};
  const currentId=String(ctx.userId||'');
@@ -179,7 +187,12 @@
   block.onclick=async()=>{
    if(!confirm('Block ID '+u.id+'?'))return;
    block.disabled=true;
-   try{await moderate('block',{blocked:true});notify('User blocked');close()}
+   try{await moderate('block',{blocked:true});
+     window.__akiraBlockedIds.add(String(u.id));
+     document.querySelectorAll('[data-akira-voice-user]').forEach(el=>{
+      if(el.dataset.akiraVoiceUser===String(u.id)){el.pause?.();el.remove()}
+     });
+     notify('User blocked and audio muted');close()}
    catch(e){notify('Block: '+e.message);block.disabled=false}
   };
   report.onclick=()=>{

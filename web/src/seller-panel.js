@@ -8,9 +8,13 @@
  const open=document.createElement('button');open.id='akiraSellerOpen';open.textContent='🪙 Coin Seller';document.body.appendChild(open);
  function mountSellerAction(){
    const wallet=document.querySelector('#v-me #wr');
-   if(wallet && open.previousElementSibling!==wallet){
-     wallet.insertAdjacentElement('afterend',open);
-     queueMicrotask(refresh);
+   if(wallet){
+     const directory=document.querySelector('#v-me #akiraSellerDirectoryButton');
+     const anchor=directory||wallet;
+     if(anchor.nextElementSibling!==open){
+       anchor.insertAdjacentElement('afterend',open);
+       queueMicrotask(refresh);
+     }
    }
    if(!wallet && open.parentElement!==document.body){
      open.style.display='none';

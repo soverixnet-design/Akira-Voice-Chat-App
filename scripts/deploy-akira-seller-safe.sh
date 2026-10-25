@@ -61,7 +61,7 @@ done
 
 echo '=== GET CANDIDATE (without pulling into live code) ==='
 git -C "$ROOT" fetch origin "$BRANCH"
-git -C "$ROOT" worktree add --detach "$REVIEW" "origin/$BRANCH"
+git -C "$ROOT" worktree add --detach "$REVIEW" FETCH_HEAD
 echo "Review commit: $(git -C "$REVIEW" rev-parse HEAD)"
 echo '=== GUARD EXISTING USER CUSTOMIZATIONS ==='
 for f in "${FILES[@]}"; do
@@ -219,6 +219,12 @@ grep -q 'Akira Connected Admin Preview' "$BACKUP/admin-served-check.html" ||
 curl -fsS --max-time 15 "$WEB_ORIGIN/" -o "$BACKUP/index-served-check.html"
 grep -q 'seller-directory.js' "$BACKUP/index-served-check.html" ||
   { echo 'Updated seller directory script not in live website HTML'; exit 1; }
+curl -fsS --max-time 15 "$WEB_ORIGIN/room.html" -o "$BACKUP/room-served-check.html"
+grep -q 'src/room-live.js' "$BACKUP/room-served-check.html" ||
+  { echo 'Real room seat UI not served'; exit 1; }
+curl -fsS --max-time 15 "$WEB_ORIGIN/delete-account.html" -o "$BACKUP/deletion-served-check.html"
+grep -q 'Akira Account Deletion' "$BACKUP/deletion-served-check.html" ||
+  { echo 'Required account deletion page not served'; exit 1; }
 DONE=1
 echo "DEPLOYMENT AND READ-ONLY SMOKE TESTS PASSED. Backup: $BACKUP"
 echo 'A real authorized seller-to-user coin transfer and voice/game device tests remain.'

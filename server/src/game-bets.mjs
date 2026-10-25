@@ -46,7 +46,7 @@ export async function placeGameBet(userId, game, body) {
     await client.query(`INSERT INTO ${g.bets}(round_id,user_id,item_id,amount,request_id) VALUES($1,$2,$3,$4,$5)`,[roundId,userId,itemId,amount,requestId]);
     await client.query('UPDATE akira_wallets SET balance=$2,updated_at=now() WHERE user_id=$1',[userId,next]);
     await client.query('INSERT INTO akira_wallet_transactions(user_id,delta,balance_after,reason,reference_key) VALUES($1,$2,$3,$4,$5)',
-      [userId,-amount,'game_bet',game+':bet:'+requestId]);
+      [userId,-amount,next,'game_bet',game+':bet:'+requestId]);
     await client.query('COMMIT');
     return {status:200,body:{ok:true,duplicate:false,balance:next,roundId,itemId,amount}};
   } catch(err){await client.query('ROLLBACK');throw err;}finally{client.release();}

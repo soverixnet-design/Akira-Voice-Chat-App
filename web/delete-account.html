@@ -30,7 +30,7 @@ h1{font-size:25px;margin:0 0 14px}p{color:#c6b8dc}label{display:block;margin:14p
    const login=await auth.json().catch(()=>({}));
    if(!auth.ok||!login.token)throw Error(login.error||'Sign in failed');
    token=login.token;
-   const result=await fetch(api+'/api/v1/account/deletion-request',{method:'POST',headers:{Authorization:'Bearer '+token}});
+   const result=await fetch(api+'/api/v1/account/deletion-request',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({confirm:'DELETE'})});
    const data=await result.json().catch(()=>({}));
    if(!result.ok)throw Error(data.error||'Request not accepted');
    status.textContent='Your account deletion request has been received. Support will process it according to the deletion policy.';

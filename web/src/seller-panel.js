@@ -17,7 +17,8 @@
  if(!/^\d{6}$/.test(id)||!Number.isSafeInteger(amount)||amount<=0){status.textContent='Enter valid 6-digit ID and coin amount.';return;}
  if(!confirm('Send '+amount+' coins to user '+id+' from Seller Balance?'))return;
  btn.disabled=true;status.textContent='Sending…';
- try{const result=await request('/api/v1/seller/transfer','POST',{publicId:id,amount,requestId:crypto.randomUUID()});status.textContent='Success! Receiver balance: '+result.recipientBalance;await refresh();window.dispatchEvent(new Event('akira:wallet-updated'));}catch(e){status.textContent='Failed: '+e.message;}finally{btn.disabled=false;}
+ const requestId=crypto.randomUUID();
+ try{const result=await request('/api/v1/seller/transfer','POST',{publicId:id,amount,requestId});status.textContent='Success! Receiver balance: '+result.recipientBalance;await refresh();window.dispatchEvent(new Event('akira:wallet-updated'));}catch(e){status.textContent='Failed: '+e.message;}finally{btn.disabled=false;}
  };
  setInterval(refresh,30000);setTimeout(refresh,1800);
 })();

@@ -342,19 +342,6 @@ export const requestHandler = async (req, res) => {
       return send(200,{reports:rows});
     }catch(err){console.error('report_queue_failed',err.message);return send(503,{error:'moderation_unavailable'})}
   }
-  if (url.pathname === '/api/v1/account/deletion-request' && req.method === 'POST') {
-    try {
-      const user=await authenticate(req.headers.authorization);
-      if(!user)return send(401,{error:'unauthorized'});
-      const {rows}=await getPool().query(
-        "INSERT INTO akira_account_deletion_requests(user_id) VALUES($1) ON CONFLICT(user_id) DO UPDATE SET requested_at=now() WHERE akira_account_deletion_requests.status <> 'completed' RETURNING requested_at,status",
-        [user.id]
-      );
-      if(!rows.length)return send(409,{error:'request_already_completed'});
-      return send(202,{ok:true,status:rows[0].status,requestedAt:rows[0].requested_at,
-        message:'Deletion request received. Account deletion is not instant; support will process your request.'});
-    }catch(err){console.error('deletion_request_failed',err.message);return send(503,{error:'deletion_request_unavailable'})}
-  }
   if (url.pathname === '/api/v1/admin/deletion-requests' && req.method === 'GET') {
     try{
       const admin=await requireAdmin(req.headers.authorization);

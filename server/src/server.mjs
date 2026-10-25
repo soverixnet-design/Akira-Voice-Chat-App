@@ -61,7 +61,7 @@ export const requestHandler = async (req, res) => {
       return send(503,{error:'auth_unavailable'});
     }
   }
-  if (['/api/v1/seller/wallet','/api/v1/seller/transfer','/api/v1/admin/sellers/allocate'].includes(url.pathname)) {
+  if (['/api/v1/seller/wallet','/api/v1/seller/transfer','/api/v1/seller/history','/api/v1/admin/sellers/allocate'].includes(url.pathname)) {
     try {
       if (url.pathname==='/api/v1/admin/sellers/allocate') {
         if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
@@ -75,6 +75,13 @@ export const requestHandler = async (req, res) => {
       }
       const user=await authenticate(req.headers.authorization);
       if(!user)return send(401,{error:'unauthorized'});
+      if(url.pathname==='/api/v1/seller/history'){
+        if(req.method!=='GET')return send(405,{error:'method_not_allowed'});
+        const seller=await sellerBalance(user.id);
+        if(!seller||!seller.enabled)return send(403,{error:'seller_not_enabled'});
+        const {rows}=await getPool().query('SELECT t.id,u.public_id AS "recipientId",t.amount,t.created_at AS "createdAt" FROM akira_seller_transfers t JOIN akira_users u ON u.id=t.recipient_id WHERE t.seller_id=$1 ORDER BY t.id DESC LIMIT 50',[user.id]);
+        return send(200,{transfers:rows});
+      }
       if(url.pathname==='/api/v1/seller/wallet'){
         if(req.method!=='GET')return send(405,{error:'method_not_allowed'});
         const wallet=await sellerBalance(user.id);

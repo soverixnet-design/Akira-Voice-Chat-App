@@ -139,5 +139,41 @@ try{
     console.log('PASS connected admin controls at 390x844');
     await page.close();
   }
+
+  // Verify the real room-seat adapter uses authenticated server state, not demo occupants.
+  {
+    const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
+    const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    let taken=false;
+    await page.route('https://api.soverixnet.online/**',async route=>{
+      const request=route.request(),path=new URL(request.url()).pathname;
+      const headers={'access-control-allow-origin':'http://127.0.0.1:4174',
+        'access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'authorization,content-type'};
+      if(request.method()==='OPTIONS')return route.fulfill({status:204,headers});
+      if(path==='/api/v1/rooms/100001/seat'&&request.method()==='POST')taken=true;
+      const state={ok:true,roomId:'100001',seatCount:10,ownerId:'1',name:'Live Test Room',themeKey:'ocean',
+        seats:taken?[{seatNo:1,publicId:'100002',displayName:'My Real ID'}]:[],
+        members:[{publicId:'100002',displayName:'My Real ID'}]};
+      return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(state)});
+    });
+    await page.goto('http://127.0.0.1:4174/room.html');
+    await page.evaluate(()=>{
+      AkiraBridge.setContext({id:'100001',ownerId:'100001',userId:'100002',name:'Live Test Room',
+        voiceApi:'https://api.soverixnet.online',voiceAuth:'A'.repeat(43)});
+    });
+    await page.addScriptTag({url:'http://127.0.0.1:4174/src/room-live.js'});
+    await page.waitForFunction(()=>window.__akiraLiveRoomSeats===true);
+    assert.equal(await page.locator('.seat').count(),10);
+    assert.equal(await page.locator('.seat').filter({hasText:'Rafi'}).count(),0);
+    await page.locator('.seat[data-i="1"]').click();
+    await page.locator('#akiraTakeSeat').click();
+    await page.locator('.seat[data-i="1"]').getByText('My Real ID').waitFor();
+    assert.equal(taken,true);
+    assert.equal(await page.locator('#mic').getAttribute('aria-label'),'Mute or unmute');
+    assert.deepEqual(errors,[]);
+    results.push({width:390,height:844,status:'live_room_seats_passed'});
+    console.log('PASS database-backed voice seats at 390x844');
+    await page.close();
+  }
   await writeFile('test-results/browser.json',JSON.stringify(results,null,2));
 }finally{await browser.close();server.kill()}

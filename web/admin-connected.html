@@ -81,7 +81,32 @@ async function dashPage(initial){const data=initial||await call('/api/v1/admin/d
 async function usersPage(){const c=card('Find account by 6-digit ID');const fields=el('div','fields');const uid=input(fields,'User ID','100001');const actions=el('div','controls');const result=el('div');actions.append(button('Search user',async()=>{result.replaceChildren();if(!checkId(uid.value)){result.textContent='Enter a valid 6-digit ID';return}try{const d=await call('/api/v1/admin/users/search?id='+encodeURIComponent(uid.value.trim()));if(!d.user){result.textContent='User not found';return}line(result,'ID',d.user.public_id);line(result,'Name',d.user.display_name);line(result,'Country',d.user.country_code||'-')}catch(e){result.textContent=e.message}}));
  actions.append(button('Recent users',async()=>{result.replaceChildren();try{const d=await call('/api/v1/admin/users');for(const u of d.users||[])line(result,(u.display_name||'User')+' · '+u.public_id,u.country_code||'—')}catch(e){result.textContent=e.message}},'btn o s'));c.append(fields,actions,result);
  if(role==='super_admin'){const bc=card('User ban / unban');const id=input(bc,'User ID','100001');const controls=el('div','controls');for(const [word,banned] of [['Ban user',true],['Unban user',false]])controls.append(button(word,async()=>{if(!checkId(id.value)){setStatus('Invalid User ID',true);return}if(!confirm((banned?'Ban':'Unban')+' user '+id.value+'?'))return;try{await post('/api/v1/admin/users/ban',{publicId:id.value.trim(),banned});setStatus('User status updated.')}catch(e){setStatus(e.message,true)}},banned?'btn r s':'btn k s'));bc.append(controls);bc.appendChild(el('p','status'));bc.lastChild.id='status'} }
-async function sellersPage(){const list=card('Verified Coin Seller List');const r=await call('/api/v1/sellers');const arr=r.sellers||[];list.appendChild(el('p','subtle',arr.length+' active sellers'));if(!arr.length)list.appendChild(el('p','','No active sellers yet.'));for(const s of arr)line(list,s.displayName||'Coin Seller','ID '+s.publicId);if(role!=='super_admin'){notice('Only Super Admin can allocate seller inventory.');return}
+async function sellersPage(){const list=card('Verified Coin Seller List');const r=await call('/api/v1/sellers');const arr=r.sellers||[];list.appendChild(el('p','subtle',arr.length+' active sellers'));if(!arr.length)list.appendChild(el('p','','No active sellers yet.'));for(const s of arr)line(list,s.displayName||'Coin Seller','ID '+s.publicId);if(role!=='super_admin'){notice('Only Super Admin can manage sellers.');return}
+ const access=card('Seller permissions');
+ access.appendChild(el('p','subtle','Enable or disable a seller account without changing the coin balance.'));
+ const accessFields=el('div','fields'), sellerId=input(accessFields,'Seller 6-digit User ID','100001');
+ access.appendChild(accessFields);
+ const statusButtons=el('div','controls');
+ const accessMessage=el('p','status');
+ for(const [title,enabled] of [['Enable seller',true],['Disable seller',false]]){
+   const action=button(title,async()=>{
+     const id=sellerId.value.trim();
+     if(!checkId(id)){accessMessage.textContent='Enter a valid 6-digit User ID.';return}
+     if(!confirm((enabled?'Enable':'Disable')+' seller '+id+'?'))return;
+     action.disabled=true;accessMessage.textContent='Saving seller access...';
+     try{
+       const result=await post('/api/v1/admin/sellers/status',{publicId:id,enabled});
+       accessMessage.textContent=result.enabled?'Seller enabled.':'Seller disabled.';
+       const latest=await call('/api/v1/sellers');
+       list.replaceChildren(el('h3','','Verified Coin Seller List'));
+       const active=latest.sellers||[];list.appendChild(el('p','subtle',active.length+' active sellers'));
+       for(const x of active)line(list,x.displayName||'Coin Seller','ID '+x.publicId);
+     }catch(err){accessMessage.textContent='Unable to change seller status: '+err.message}
+     finally{action.disabled=false}
+   },enabled?'btn k s':'btn r s');
+   statusButtons.appendChild(action);
+ }
+ access.append(statusButtons,accessMessage);
  const c=card('Allocate Seller Balance');c.appendChild(el('p','subtle','Credits SELLER inventory, not the personal wallet. The current backend also enables the seller upon allocation.'));
  const f=el('div','fields');const id=input(f,'Seller User ID','100001');const amount=input(f,'Seller coin amount','Positive integer','number');c.appendChild(f);let pending=null;
  const submit=button('Allocate seller coins',async()=>{const n=checkAmount(amount.value),uid=id.value.trim();if(!checkId(uid)||!n){setStatus('Enter valid Seller ID and amount.',true);return}if(!confirm('Add '+n+' SELLER coins to ID '+uid+'? This activates Seller status.'))return;submit.disabled=true;try{const k=uid+':'+n;if(!pending||pending.key!==k)pending={key:k,id:crypto.randomUUID()};const r=await post('/api/v1/admin/sellers/allocate',{publicId:uid,amount:n,requestId:pending.id});setStatus('Seller balance: '+Number(r.balance).toLocaleString());pending=null;await render('sellers')}catch(e){setStatus('Allocation not confirmed: '+e.message,true)}finally{submit.disabled=false}});c.append(submit);const status=el('p','status');status.id='status';c.appendChild(status)}

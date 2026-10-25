@@ -64,7 +64,7 @@ export const requestHandler = async (req, res) => {
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/sellers') {
     try {
-      const {rows}=await getPool().query("SELECT u.public_id AS \"publicId\",u.display_name AS \"displayName\",u.avatar_url AS \"avatarUrl\" FROM akira_seller_wallets s JOIN akira_users u ON u.id=s.user_id WHERE s.enabled=true ORDER BY u.public_id LIMIT 200");
+      const {rows}=await getPool().query("SELECT u.public_id AS \"publicId\",u.display_name AS \"displayName\",u.avatar_url AS \"avatarUrl\" FROM akira_seller_wallets s JOIN akira_users u ON u.id=s.user_id WHERE s.enabled=true AND u.is_banned=false ORDER BY u.public_id LIMIT 200");
       return send(200,{sellers:rows});
     } catch(err) {console.error('seller_list_failed',err.message);return send(503,{error:'seller_list_unavailable'});}
   }

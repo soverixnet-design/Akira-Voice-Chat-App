@@ -4,7 +4,7 @@ set -Eeuo pipefail
 MODE="${1:---check}"
 [[ "$MODE" == "--check" || "$MODE" == "--apply" ]] || { echo 'Use --check or --apply'; exit 2; }
 ROOT="${AKIRA_LIVE_ROOT:-/opt/akira}"
-STAGE_PORT="${AKIRA_STAGE_PORT:-4302}"
+# Staging health and API probes run inside the container: independent of VPS port forwarding.
 BRANCH='fix/akira-ci-auth-20261025'
 STAMP="$(date -u +%Y%m%d-%H%M%S)"
 REVIEW="/opt/akira-seller-review-$STAMP-$$"
@@ -87,7 +87,7 @@ done
 echo '=== TEMPORARY READ-ONLY API SMOKE TEST ON LOCAL PORT ==='
 docker build -q -t "$IMAGE" "$REVIEW/server" >/dev/null
 docker run -d --rm --name "$CONTAINER" --network akira-private \
-  -p "127.0.0.1:$STAGE_PORT:4301" --memory 192m --cpus 0.5 \
+  --memory 192m --cpus 0.5 \
   --security-opt no-new-privileges:true --read-only --tmpfs /tmp \
   -v "$ROOT/secrets/postgres_password:/run/secrets/db_password:ro" \
   -e HOST=0.0.0.0 -e PORT=4301 -e PGHOST=akira-postgres \
@@ -97,14 +97,15 @@ docker run -d --rm --name "$CONTAINER" --network akira-private \
   "$IMAGE" >/dev/null
 READY=0
 for attempt in $(seq 1 25); do
-  if curl --max-time 3 -fsS "http://127.0.0.1:$STAGE_PORT/health" >/dev/null 2>&1; then
+  if docker exec "$CONTAINER" node -e "fetch('http://127.0.0.1:4301/health',{signal:AbortSignal.timeout(2500)}).then(async r=>{const j=await r.json();process.exit(r.status===200&&j.ok===true?0:1)}).catch(()=>process.exit(1))" >/dev/null 2>&1; then
     READY=1
     break
   fi
   sleep 1
 done
-[[ "$READY" == 1 ]] || { docker logs --tail 25 "$CONTAINER"; echo 'Staging unhealthy; live untouched'; exit 1; }
-AKIRA_API_BASE="http://127.0.0.1:$STAGE_PORT" node "$REVIEW/scripts/smoke-prod.mjs"
+[[ "$READY" == 1 ]] || { docker logs --tail 35 "$CONTAINER"; echo 'Staging health check failed INSIDE container; live untouched'; exit 1; }
+echo '=== CHECK API ROUTES FROM INSIDE THE ISOLATED STAGING CONTAINER ==='
+docker exec -i -e AKIRA_API_BASE=http://127.0.0.1:4301 "$CONTAINER" node --input-type=module - < "$REVIEW/scripts/smoke-prod.mjs"
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
 
 if [[ "$MODE" == "--check" ]]; then

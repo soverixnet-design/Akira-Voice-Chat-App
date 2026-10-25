@@ -11,6 +11,7 @@ import { register, login, authenticate, logout, profile } from './auth.mjs';
 import { randomUUID, createHmac } from 'node:crypto';
 import { createRoom, joinRoom, leaveRoom } from './rooms.mjs';
 import {roomSeats,setSeat,updateRoomSettings} from './room-seats.mjs';
+import {deletionRequestStatus,submitDeletionRequest} from './account-deletion.mjs';
 import { pathToFileURL } from 'node:url';
 
 const port = Number(process.env.PORT || 4301);
@@ -62,6 +63,21 @@ export const requestHandler = async (req, res) => {
       console.error('auth_failed',err.code || err.message);
       return send(503,{error:'auth_unavailable'});
     }
+  }
+  if(url.pathname==='/api/v1/account/deletion-request'){
+    try{
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      if(req.method==='GET'){
+        const result=await deletionRequestStatus(user.id);
+        return send(result.status,result.body);
+      }
+      if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+      let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>2048)return send(413,{error:'payload_too_large'})}
+      let body;try{body=JSON.parse(raw)}catch{return send(400,{error:'invalid_json'})}
+      const result=await submitDeletionRequest(user.id,body);
+      return send(result.status,result.body);
+    }catch(err){console.error('account_deletion_request_failed',err.code||err.message);return send(503,{error:'account_deletion_request_unavailable'})}
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/sellers') {
     try {

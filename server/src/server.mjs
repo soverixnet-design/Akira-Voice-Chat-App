@@ -1,4 +1,4 @@
-import { getWallet, walletHistory } from './wallet.mjs';
+import { getWallet, walletHistory, applyWalletDelta } from './wallet.mjs';
 import { placeGameBet } from './game-bets.mjs';
 import { startGameEngine } from './game-engine.mjs';
 import { profileRoutes } from './profiles.mjs';
@@ -212,6 +212,35 @@ export const requestHandler = async (req, res) => {
       return send(503,{error:'admin_unavailable'});
     }
   }
+  // Super-admin recharge: credit the authoritative wallet, never a browser-local balance.
+  if (req.method === 'POST' && url.pathname === '/api/v1/admin/wallet/recharge') {
+    try {
+      const admin = await requireAdmin(req.headers.authorization);
+      if (admin.error) return send(admin.status,{error:admin.error});
+      if (admin.role !== 'super_admin') return send(403,{error:'super_admin_required'});
+      let raw='';
+      for await (const chunk of req) {
+        raw+=chunk;
+        if (raw.length>4096) return send(413,{error:'payload_too_large'});
+      }
+      let body;
+      try {body=JSON.parse(raw);} catch {return send(400,{error:'invalid_json'});}
+      const publicId=String(body?.publicId??'');
+      const amount=body?.amount;
+      const requestId=body?.requestId;
+      if (!/^\d{6}$/.test(publicId) || !Number.isSafeInteger(amount) || amount<=0 ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId||''))
+        return send(400,{error:'invalid_recharge'});
+      const {rows}=await getPool().query('SELECT id FROM akira_users WHERE public_id=$1',[publicId]);
+      if (!rows.length) return send(404,{error:'user_not_found'});
+      const wallet=await applyWalletDelta(rows[0].id,amount,'admin_recharge','admin_recharge:'+admin.user.id+':'+requestId);
+      return send(200,{ok:true,publicId,wallet});
+    } catch(err) {
+      console.error('admin_recharge_failed',err.message);
+      return send(503,{error:'admin_recharge_unavailable'});
+    }
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/v1/admin/users/search') {
     try {
       const admin = await requireAdmin(req.headers.authorization);

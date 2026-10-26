@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - fix/akira-ci-auth-20261025
+      - feature/akira-v7-voice-games-wallet-20261027
   pull_request:
     paths:
       - 'server/**'
@@ -31,6 +32,8 @@ jobs:
           node --check web/src/seller-panel.js
           node --check web/src/seller-directory.js
           node --check scripts/smoke-prod.mjs
+          node --check web/src/google-login-v7.js
+          node --check web/src/wallet-v7.js
       - name: Check staging and deployment shell syntax
         run: |
           bash -n scripts/deploy-akira-seller-safe.sh
@@ -72,3 +75,32 @@ jobs:
           test "$ready" -eq 1
           docker exec akira-stage-smoke node -e "fetch('http://127.0.0.1:4301/health',{headers:{Origin:'https://api.soverixnet.online'}}).then(r=>process.exit(r.headers.get('access-control-allow-origin')==='https://api.soverixnet.online'?0:1)).catch(()=>process.exit(1))"
 
+
+  android-debug:
+    if: github.ref == 'refs/heads/feature/akira-v7-voice-games-wallet-20261027'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install and compile app with native Google sign-in
+        run: |
+          npm ci
+          npm run build
+          npx cap sync android
+          chmod +x android/gradlew
+          (cd android && ./gradlew :app:assembleDebug --no-daemon)
+          test -s android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload debug APK for QA only
+        uses: actions/upload-artifact@v4
+        with:
+          name: Akira-V7-QA-Debug-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7

@@ -15,6 +15,23 @@ import {deletionRequestStatus,submitDeletionRequest} from './account-deletion.mj
 import {dailyRewardStatus,claimDailyReward} from './daily-rewards.mjs';
 import {googleClientId,googleSignIn,linkGoogleAccount} from './google-auth.mjs';
 import { pathToFileURL } from 'node:url';
+/* Preserve pre-existing Akira admin handlers when deploying over an established
+   server. Fresh installations do not include these optional legacy modules. */
+async function loadOptionalLegacyModule(path) {
+  try { return await import(path); }
+  catch (error) {
+    if (error.code === 'ERR_MODULE_NOT_FOUND' &&
+        String(error.message).includes(path.replace('./',''))) return {};
+    throw error;
+  }
+}
+const {controlRoutes: legacyControlRoutes} = await loadOptionalLegacyModule('./control.mjs');
+const {serveAdmin: legacyServeAdmin} = await loadOptionalLegacyModule('./admin-panel.mjs');
+if (legacyControlRoutes && typeof legacyControlRoutes !== 'function')
+  throw Error('invalid_legacy_control_routes');
+if (legacyServeAdmin && typeof legacyServeAdmin !== 'function')
+  throw Error('invalid_legacy_admin_handler');
+
 
 const port = Number(process.env.PORT || 4301);
 const host = process.env.HOST || '127.0.0.1';
@@ -24,6 +41,7 @@ const allowedOrigins = new Set((process.env.AKIRA_ALLOWED_ORIGINS || '').split('
 
 export const requestHandler = async (req, res) => {
   const url = new URL(req.url || '/', 'http://localhost');
+  if (legacyServeAdmin && legacyServeAdmin(req,res,url)) return;
   if (/^\/rooms\/\d{1,18}\/voice-token$/.test(url.pathname)) url.pathname = '/api/v1' + url.pathname;
   const origin = req.headers.origin;
   const originAllowed = Boolean(origin && allowedOrigins.has(origin));
@@ -49,6 +67,7 @@ export const requestHandler = async (req, res) => {
     });
     return res.end();
   }
+  if (legacyControlRoutes && await legacyControlRoutes(req,url,send)) return;
   if(req.method==='GET'&&url.pathname==='/api/v1/auth/google/config'){
     const clientId=googleClientId();
     return send(200,{enabled:!!clientId,clientId});

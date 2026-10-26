@@ -106,6 +106,8 @@ try{
         path==='/api/v1/admin/sellers/status'?{ok:true,publicId:body.publicId,enabled:body.enabled}:
         path==='/api/v1/admin/sellers/allocate'?{status:200,balance:300}:
         path==='/api/v1/admin/wallet/recharge'?{ok:true,wallet:{balance:7800}}:
+        path==='/api/v1/admin/rooms/update'?{ok:true,room:{id:body.publicId,isLocked:body.locked,seatCount:body.seatCount||10}}:
+        path==='/api/v1/admin/game-status'?{enabled:true,games:[{name:'food-wheel',round:{id:'12',settledAt:null}},{name:'jackpot-fruit',round:null}]}:
         path==='/api/v1/admin/users/search'?{user:{public_id:'100012',display_name:'Approved Seller',country_code:'BD'}}:
         path==='/api/v1/admin/users'?{users:[]}:
         path==='/api/v1/admin/roles'?{roles:[]}:
@@ -113,7 +115,7 @@ try{
         path==='/api/v1/rooms'?{rooms:[]}:{ok:true};
       await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(payload)});
     });
-    await page.goto('http://127.0.0.1:4174/admin-connected.html');
+    await page.goto('http://127.0.0.1:4174/admin.html');
     await page.locator('input[type=email]').fill('admin@example.com');
     await page.locator('input[type=password]').fill('not-a-real-password');
     await page.getByRole('button',{name:'Sign In'}).click();
@@ -134,6 +136,21 @@ try{
     await recharge.getByRole('button',{name:'Credit wallet'}).click();
     await page.getByText(/Wallet credited/).waitFor();
     assert(operations.some(x=>x.path==='/api/v1/admin/wallet/recharge'&&x.body.publicId==='100012'&&x.body.amount===50));
+    await page.getByRole('button',{name:'☰'}).click();
+    await page.locator('nav#nv [data-page="rooms"]').click();
+    const rooms=page.locator('section.card').filter({hasText:'Manage Live Room'});
+    await rooms.getByRole('textbox',{name:'Room ID'}).fill('100014');
+    await rooms.getByLabel('Room access').selectOption('true');
+    await rooms.getByLabel('Seat count').selectOption('5');
+    page.once('dialog',dialog=>dialog.accept());
+    await rooms.getByRole('button',{name:'Save Room Settings'}).click();
+    await page.getByText(/Saved room 100014/).waitFor();
+    assert(operations.some(x=>x.path==='/api/v1/admin/rooms/update' && x.body.publicId==='100014' && x.body.locked===true && x.body.seatCount===5));
+    await page.getByRole('button',{name:'☰'}).click();
+    await page.locator('nav#nv [data-page="games"]').click();
+    await page.getByText('Live Game Engine — Read Only').waitFor();
+    await page.getByText('Settlement engine').waitFor();
+    assert(operations.some(x=>x.path==='/api/v1/admin/game-status'));
     assert.deepEqual(errors,[]);
     results.push({width:390,height:844,status:'admin_connected_passed'});
     console.log('PASS connected admin controls at 390x844');

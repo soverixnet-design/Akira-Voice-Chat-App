@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 umask 077
 APP=/opt/akira
-REF=d2c598d10e90a8f134cdc06e9d628866e560286a
+REF=2f07c3daeb4bfdd0ddf8601b9f065d4c16a08fb3
 REPO=https://raw.githubusercontent.com/soverixnet-design/Akira-Voice-Chat-App
 BACKUP_BASE=/opt/akira/security-backups
 mkdir -p "$BACKUP_BASE"
@@ -69,12 +69,12 @@ if [[ "$current_room" != f6d12b4fde1a9a2fa9d7560dd3dae9407b350e37 && "$current_r
 fi
 for file in \
  "web/src/admin-v4-app.js:b48ca4de034a27f9e2ca5335ccb0f6eac2175434" \
- "web/src/room-v5-integrity.js:29ba4b46f3462cb5c316f9f4b0647a937640f407"; do
+ "web/src/room-v5-integrity.js:f452af409fac6aa3f6e91c9020ff00e922c18c67"; do
  IFS=: read -r relative expected <<< "$file"
  if [[ -f "$relative" ]]; then need_blob "$relative" "$expected"; fi
 done
 download web/src/admin-v4-app.js b48ca4de034a27f9e2ca5335ccb0f6eac2175434
-download web/src/room-v5-integrity.js 29ba4b46f3462cb5c316f9f4b0647a937640f407
+download web/src/room-v5-integrity.js f452af409fac6aa3f6e91c9020ff00e922c18c67
 download web/src/room-live.js bf06bd2b4cc0cf92e7f8c5458ec84239f6fa1e54
 node --check "$TMP/web/src/admin-v4-app.js"
 node --check "$TMP/web/src/room-v5-integrity.js"

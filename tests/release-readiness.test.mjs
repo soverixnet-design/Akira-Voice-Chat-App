@@ -13,8 +13,8 @@ test('real protected Admin finance and safety endpoints are wired',()=>{
   assert(api.includes(route),'Missing API route '+route);
  }
  assert.match(admin,/function plannedPage\(/);
- assert.match(admin,//api\/v1\/admin\/wallet\/recharge/);
- assert.match(admin,//api\/v1\/admin\/sellers\/status/);
+ assert(admin.includes('/api/v1/admin/wallet/recharge'));
+ assert(admin.includes('/api/v1/admin/sellers/status'));
 });
 test('Akira loads authenticated wallet and seller scripts without replacing existing UI',()=>{
  for(const script of ['src/seller-panel.js','src/seller-directory.js','src/wallet-sync.js','src/wallet-safety.js','src/account-deletion-ui.js']){

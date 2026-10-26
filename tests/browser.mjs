@@ -175,5 +175,58 @@ try{
     console.log('PASS database-backed voice seats at 390x844');
     await page.close();
   }
+
+  // Dedicated Akira finance page: protected original Wallet and Seller inventory UI, all mocked.
+  {
+    const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
+    const errors=[],operations=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    await page.route('https://api.soverixnet.online/**',async route=>{
+      const req=route.request(),path=new URL(req.url()).pathname;
+      const headers={'access-control-allow-origin':'http://127.0.0.1:4174',
+        'access-control-allow-methods':'GET, POST, OPTIONS',
+        'access-control-allow-headers':'authorization,content-type'};
+      if(req.method()==='OPTIONS')return route.fulfill({status:204,headers});
+      const body=req.postDataJSON?.()||{};
+      operations.push({path,method:req.method(),body});
+      const result=path==='/api/v1/auth/login'?{token:'A'.repeat(43)}:
+        path==='/api/v1/admin/dashboard'?{role:'super_admin',stats:{users:15,rooms:2}}:
+        path==='/api/v1/admin/users/search'?{user:{public_id:100012,display_name:'Verified Receiver',country_code:'BD'}}:
+        path==='/api/v1/sellers'?{sellers:[{publicId:'100012',displayName:'Verified Receiver'}]}:
+        path==='/api/v1/admin/wallet/recharge'?{ok:true,wallet:{balance:7800}}:
+        path==='/api/v1/admin/sellers/allocate'?{ok:true,balance:5000}:
+        path==='/api/v1/admin/sellers/status'?{ok:true,enabled:body.enabled}:
+        {ok:true};
+      await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(result)});
+    });
+    await page.goto('http://127.0.0.1:4174/admin-finance.html');
+    await page.locator('#email').fill('admin@example.com');
+    await page.locator('#password').fill('test-password');
+    await page.locator('#loginBtn').click();
+    await page.locator('#financePanel:not(.hidden)').waitFor();
+    await page.locator('#rechargeId').fill('100012');
+    await page.locator('#rechargeAmount').fill('100');
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('#rechargeButton').click();
+    await page.getByText(/Original Wallet: 7,800/).waitFor();
+    await page.locator('#sellerId').fill('100012');
+    await page.locator('#sellerAmount').fill('500');
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('#allocateButton').click();
+    await page.getByText(/Seller Balance: 5,000/).waitFor();
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('#disableButton').click();
+    await page.getByText(/Seller disabled/).waitFor();
+    assert(operations.some(x=>x.path==='/api/v1/admin/wallet/recharge'&&x.body.publicId==='100012'&&x.body.amount===100&&x.body.requestId));
+    assert(operations.some(x=>x.path==='/api/v1/admin/sellers/allocate'&&x.body.publicId==='100012'&&x.body.amount===500&&x.body.requestId));
+    assert(operations.some(x=>x.path==='/api/v1/admin/sellers/status'&&x.body.enabled===false));
+    assert.deepEqual(errors,[]);
+    await page.locator('#logout').click();
+    await page.locator('#loginPanel:not(.hidden)').waitFor();
+    results.push({width:390,height:844,status:'admin_finance_passed'});
+    console.log('PASS Admin Finance recharge, seller allocation, permission and logout');
+    await page.close();
+  }
+
   await writeFile('test-results/browser.json',JSON.stringify(results,null,2));
 }finally{await browser.close();server.kill()}

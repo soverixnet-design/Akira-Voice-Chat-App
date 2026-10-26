@@ -54,6 +54,9 @@ try{
       const headers={'access-control-allow-origin':'http://127.0.0.1:4174','access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'authorization,content-type'};
       if(req.method()==='OPTIONS')return route.fulfill({status:204,headers});
       const payload=path==='/api/v1/wallet'?{wallet:{balance:6500}}:
+        path==='/api/v1/community/balance'?{coins:'6500',diamonds:'350'}:
+        path==='/api/v1/community/exchange-rate'?{coins_per_100:70}:
+        path==='/api/v1/community/sellers'?{items:[{id:'100012',name:'Verified Seller'}]}:
         path==='/api/v1/seller/wallet'?{wallet:{balance:20000,enabled:true}}:
         path==='/api/v1/sellers'?{sellers:[{publicId:'100012',displayName:'Verified Seller',avatarUrl:null}]}:
         path==='/api/v1/seller/history'?{transfers:[{recipientId:'100101',amount:100,createdAt:'2026-10-25T10:00:00Z'}]}:
@@ -82,8 +85,11 @@ try{
     await page.getByText(/Success! Receiver balance/).waitFor();
     await page.locator('#akiraSellerClose').click();
     await page.evaluate(()=>rechargeSheet());
-    await page.locator('#rcp [data-p]').first().click();
-    await page.getByText(/not connected to the real wallet yet/).waitFor();
+    await page.locator('#av7wallet').waitFor();
+    await page.getByText('Exact balance: 6,500').waitFor();
+    await page.getByText(/100 diamonds → 70 coins/).waitFor();
+    await page.locator('#av7wallet [data-av7="recharge"]').click();
+    await page.getByText('Recharge packages',{exact:true}).waitFor();
     assert.deepEqual(errors,[]);
     results.push({width:390,height:844,status:'seller_wallet_passed'});
     await page.close();

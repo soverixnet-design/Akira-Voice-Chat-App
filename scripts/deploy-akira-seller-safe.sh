@@ -111,6 +111,26 @@ echo '=== CHECK API ROUTES FROM INSIDE THE ISOLATED STAGING CONTAINER ==='
 docker exec -i -e AKIRA_API_BASE=http://127.0.0.1:4301 "$CONTAINER" node --input-type=module - < "$REVIEW/scripts/smoke-prod.mjs"
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
 
+echo '=== CURRENT LIVE SERVICE FEATURE FLAGS (NO SECRETS PRINTED) ==='
+python3 - "$ROOT/server/compose.yaml" "$ROOT/server" <<'PY'
+import json, subprocess, sys
+config=sys.argv[1]; directory=sys.argv[2]
+cmd=['docker','compose','-f',config,'--project-directory',directory]
+cid=subprocess.check_output(cmd+['ps','-q','akira-api'],text=True).strip()
+if not cid:
+    raise SystemExit('Existing Akira API container not running; stop before release')
+info=json.loads(subprocess.check_output(['docker','inspect',cid],text=True))[0]
+env=dict(item.split('=',1) for item in info['Config']['Env'] if '=' in item)
+features={
+ 'LiveKit voice':all(env.get(k) for k in ['AKIRA_LIVEKIT_API_KEY','AKIRA_LIVEKIT_API_SECRET','AKIRA_LIVEKIT_URL']),
+ 'Game rounds / settlement':env.get('AKIRA_GAME_ENGINE_ENABLED')=='true',
+ 'Google login':bool(env.get('AKIRA_GOOGLE_WEB_CLIENT_ID'))
+}
+for label,enabled in features.items():
+ print(('ENABLED' if enabled else 'NOT CONFIGURED')+' — '+label)
+print('The new release will not silently enable financial games or change live credentials.')
+PY
+
 if [[ "$MODE" == "--check" ]]; then
   echo 'PASS: Staging API, wallet permissions, and seller directory. Live app unchanged.'
   exit 0

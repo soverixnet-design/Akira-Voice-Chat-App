@@ -136,11 +136,21 @@ for f in server/src/server.mjs web/src/seller-panel.js web/src/seller-directory.
   node --check "$REVIEW/$f"
 done
 
+echo '=== VERIFY OPTIONAL EXISTING ADMIN CODE BEFORE SERVER RESTART ==='
+LEGACY_MOUNTS=()
+for admin_module in control.mjs admin-panel.mjs; do
+  if [[ -f "$ROOT/server/src/$admin_module" ]]; then
+    node --check "$ROOT/server/src/$admin_module"
+    LEGACY_MOUNTS+=("-v" "$ROOT/server/src/$admin_module:/app/src/$admin_module:ro")
+    echo "Testing compatibility with the existing $admin_module"
+  fi
+done
 echo '=== TEMPORARY READ-ONLY API SMOKE TEST ON LOCAL PORT ==='
 docker build -q -t "$IMAGE" "$REVIEW/server" >/dev/null
 docker run -d --rm --name "$CONTAINER" --network akira-private \
   --memory 192m --cpus 0.5 \
   --security-opt no-new-privileges:true --read-only --tmpfs /tmp \
+  "${LEGACY_MOUNTS[@]}" \
   -v "$ROOT/secrets/postgres_password:/run/secrets/db_password:ro" \
   -e HOST=0.0.0.0 -e PORT=4301 -e PGHOST=akira-postgres \
   -e PGPORT=5432 -e PGUSER=akira -e PGDATABASE=akira_db \

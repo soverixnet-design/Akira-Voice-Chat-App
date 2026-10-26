@@ -1,218 +1,202 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Akira Admin Panel</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Akira Admin Control Center · v2</title>
 <style>
-*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#0b1020;color:#fff}.wrap{max-width:900px;margin:auto;padding:24px}header{padding:20px 0;border-bottom:1px solid #303852}h1{color:#b7a4ff}.card{background:#19223b;border:1px solid #343e61;border-radius:18px;padding:22px;margin:15px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}input,button{padding:14px;border-radius:10px;border:0;font-size:15px}input{width:100%;background:#29334f;color:#fff;margin:8px 0}button{background:#8065e9;color:white;cursor:pointer;width:100%}.num{font-size:34px;font-weight:bold;color:#80e7d0}small{color:#aeb9d4}#dashboard{display:none}
-</style>
-</head>
-<body><div class="wrap"><header><h1>✦ Akira Admin Panel</h1><small>Secure Administration Dashboard</small></header>
-<section class="card" id="login">
-<h2>Admin Login</h2>
-<p>Sign in with your Akira account.</p>
-<form id="loginForm">
-<input id="email" type="email" placeholder="Email address" autocomplete="username" required>
-<input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
-<button type="submit">Sign In</button>
-</form>
-<p id="message" role="status"></p>
-</section>
-<section id="dashboard"><h2>Dashboard</h2><p id="role"></p><div class="grid"><div class="card"><small>Total Users</small><div class="num" id="users">—</div></div><div class="card"><small>Total Rooms</small><div class="num" id="rooms">—</div></div></div><button id="logout">Close Dashboard</button></section>
-</div><section class="card" id="akiraUserSearch" style="display:none">
-<h2>User Management</h2>
-<input id="akiraSearchId" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit User ID">
-<button type="button" id="akiraSearchBtn">Search User</button>
-<button type="button" id="akiraAllUsersBtn" style="margin-top:12px">Show All Users</button>
-<div id="akiraAllUsersResult" style="margin-top:12px;overflow-wrap:anywhere"></div>
-<div style="margin-top:18px">
-<h3>User Ban Management</h3>
-<input id="akiraBanId" inputmode="numeric" maxlength="6" placeholder="6-digit User ID">
-<div style="display:flex;gap:10px;margin-top:10px">
-<button type="button" id="akiraBanBtn" style="background:#dc3545">Ban</button>
-<button type="button" id="akiraUnbanBtn" style="background:#198754">Unban</button>
-</div>
-<p id="akiraBanResult" aria-live="polite"></p>
-</div>
-<pre id="akiraSearchResult" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
-</section>
-<section class="card" id="akiraSellerAllocation" style="display:none">
-<h2>🪙 Coin Seller Balance</h2>
-<p>Allocate seller inventory separately. This never uses the seller's personal wallet.</p>
-<input id="akiraSellerId" inputmode="numeric" maxlength="6" placeholder="Seller 6-digit User ID">
-<input id="akiraSellerCoins" type="number" min="1" step="1" placeholder="Coins to allocate">
-<button type="button" id="akiraSellerAllocateBtn">Add Seller Coins</button>
-<p id="akiraSellerAllocateResult" role="status"></p>
-</section>
-<section class="card" id="akiraRolesPanel" style="display:none">
-<h2>Admin Roles</h2><p>Super admin only. Assign admin, manager or moderator access.</p>
-<input id="akiraRoleId" inputmode="numeric" maxlength="6" placeholder="6-digit User ID">
-<select id="akiraRoleChoice" style="width:100%;padding:14px;background:#29334f;color:white;border:0;border-radius:10px;margin:8px 0">
-<option value="moderator">Moderator</option><option value="manager">Manager</option><option value="admin">Admin</option><option value="remove">Remove admin access</option>
-</select>
-<button id="akiraRoleSave" type="button">Save Role</button>
-<button id="akiraRoleRefresh" type="button" style="margin-top:10px">Show Roles &amp; Audit</button>
-<pre id="akiraRoleResult" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
-</section>
+:root{--bg:#07031a;--p1:#12082e;--p2:#1b0f40;--ln:rgba(255,255,255,.1);--tx:#f4efff;--mu:#a99fd0;--a:#9b4dff;--b:#ff3dc8;--c:#26d0ff;--g:#f6c453;--ok:#34d399;--bad:#fb7185}
+*{box-sizing:border-box;margin:0}html,body{height:100%}body{background:radial-gradient(circle at 0 0,#2a1070 0,transparent 40%),var(--bg);color:var(--tx);font:14px/1.45 system-ui,"Segoe UI",Roboto,sans-serif}
+button,input,select{font:inherit;color:inherit}button{cursor:pointer}:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+.lg{display:grid;place-items:center;min-height:100%;padding:20px}.lgc{width:min(380px,100%);text-align:center;background:var(--p1);border:1px solid var(--g);border-radius:24px;padding:28px 22px;box-shadow:0 0 50px rgba(155,77,255,.35)}.lgc img{width:120px;height:120px;border-radius:50%;box-shadow:0 0 40px rgba(255,61,200,.5)}.lgc h1{font-size:20px;margin:12px 0 4px}.lgc p{color:var(--mu);margin-bottom:14px}
+input,select{width:100%;background:rgba(0,0,0,.35);border:1px solid var(--ln);border-radius:12px;padding:11px 12px;margin-bottom:10px}
+.btn{border:0;border-radius:12px;padding:10px 16px;font-weight:700;background:linear-gradient(90deg,var(--a),var(--b));color:#fff;box-shadow:0 3px 0 #4c1d95}.btn:active{transform:translateY(2px);box-shadow:none}.btn.s{padding:6px 11px;font-size:12.5px}.btn.o{background:none;border:1px solid var(--ln);box-shadow:none;color:var(--tx)}.btn.r{background:linear-gradient(90deg,#e11d48,#fb7185);box-shadow:0 3px 0 #7f1233}.btn.k{background:linear-gradient(90deg,#059669,#34d399);box-shadow:0 3px 0 #065f46;color:#04281c}
+.app{display:grid;grid-template-columns:230px 1fr;min-height:100%}
+nav{background:var(--p1);border-right:1px solid var(--ln);padding:14px 10px;position:sticky;top:0;height:100vh;overflow:auto}
+.br{display:flex;gap:10px;align-items:center;padding:4px 8px 14px}.br img{width:40px;height:40px;border-radius:50%}.br b{font-size:15px;line-height:1.1}.br small{color:var(--mu);display:block;font-size:11px}
+nav a{display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;color:var(--mu);text-decoration:none;margin-bottom:2px;cursor:pointer}nav a:hover{background:rgba(255,255,255,.06)}nav a.on{color:#fff;background:linear-gradient(90deg,rgba(155,77,255,.55),rgba(255,61,200,.25));box-shadow:inset 3px 0 0 var(--g)}nav a em{margin-left:auto;background:var(--b);color:#fff;border-radius:10px;padding:0 7px;font-size:11px;font-style:normal}
+main{padding:18px 22px 60px;min-width:0}.top{display:flex;align-items:center;gap:10px;margin-bottom:16px}.top h2{font-size:22px}.top .sp{flex:1}.burger{display:none}
+.who{font-size:12.5px;color:var(--mu);text-align:right}.who b{color:var(--g)}
+.kp{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}.k{background:var(--p2);border:1px solid var(--ln);border-radius:16px;padding:14px}.k small{color:var(--mu)}.k b{display:block;font-size:24px;margin-top:2px}.k.w{border-color:var(--g)}
+.card{background:var(--p1);border:1px solid var(--ln);border-radius:16px;padding:16px;margin-bottom:16px}.card h3{font-size:15px;margin-bottom:10px}.card p.n{color:var(--mu);font-size:12.5px;margin-bottom:10px}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:560px}th{text-align:left;color:var(--mu);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--ln);font-size:12.5px}td{padding:9px 10px;border-bottom:1px solid var(--ln)}tr:hover td{background:rgba(255,255,255,.03)}td input{margin:0;padding:6px 8px;width:90px}
+.tag{display:inline-block;border-radius:10px;padding:2px 9px;font-size:11.5px;font-weight:700}.t-ok{background:rgba(52,211,153,.18);color:var(--ok)}.t-bad{background:rgba(251,113,133,.18);color:var(--bad)}.t-w{background:rgba(246,196,83,.18);color:var(--g)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}.row input,.row select{width:auto;flex:1;min-width:140px;margin:0}
+.bars{display:flex;align-items:flex-end;gap:8px;height:130px}.bars i{flex:1;border-radius:8px 8px 0 0;background:linear-gradient(var(--c),var(--a));position:relative;min-height:6px}.bars i s{position:absolute;bottom:-18px;left:0;right:0;text-align:center;text-decoration:none;font-size:10.5px;color:var(--mu);font-style:normal}
+.sw{width:44px;height:24px;border-radius:14px;background:#3a2d63;border:0;position:relative;padding:0;flex:none}.sw::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s}.sw.on{background:var(--ok)}.sw.on::after{left:23px}
+.rtp{font-size:30px;font-weight:800}.mod{position:fixed;inset:0;background:rgba(0,0,0,.65);display:grid;place-items:center;z-index:50;padding:16px}.mdl{background:var(--p1);border:1px solid var(--g);border-radius:20px;padding:18px;width:min(460px,100%);max-height:90vh;overflow:auto}.mdl h3{margin-bottom:10px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#1d1245;border:1px solid var(--g);border-radius:20px;padding:10px 18px;z-index:99}
+.ft{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--ln)}.ft small{color:var(--mu);display:block}
+@media(max-width:820px){.app{grid-template-columns:1fr}nav{position:fixed;z-index:40;left:-250px;width:230px;transition:.2s}nav.open{left:0}.burger{display:inline-block}main{padding:14px 12px 60px}}
+.gh{color:var(--g);font-size:11.5px;margin:14px 10px 4px;font-weight:700}textarea{font:inherit}label{display:block;margin:6px 0 3px}.g2{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0 12px}
+/* Connected admin v2 layout */
+body{min-height:100vh}.app{min-height:100vh}.lgc{max-width:425px}.lgc input{margin:8px 0}
+#root{min-height:100vh}.br .brand-icon,.brand-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:14px;background:linear-gradient(140deg,#9b4dff,#ff3dc8);font-weight:900;color:white;box-shadow:0 5px 24px #ab55ff66}
+.nav-section{padding:13px 12px 5px;color:#b8a6de;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+#nv a{user-select:none}.top h2{font-size:24px}.k b{overflow-wrap:anywhere}.kp{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.note{border:1px solid rgba(246,196,83,.4);background:rgba(246,196,83,.07);border-radius:12px;padding:12px 14px;margin:12px 0;color:#ffebad}
+.card{margin:15px 0}.card h3{margin-bottom:10px}.card input,.card select{margin:8px 0}.controls{display:flex;gap:9px;flex-wrap:wrap}.controls>button{flex:1;min-width:120px}.subtle{color:#aaa1c5;font-size:13px}.rowline{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 5px;border-bottom:1px solid rgba(255,255,255,.08)}.rowline small{display:block;color:#b4a5d4}.pill{padding:4px 10px;border-radius:10px;background:#452067;color:#efccff;font-size:12px}.err{color:#ffa4b6}.ok{color:#64efc3}.status{min-height:20px;white-space:pre-wrap}.bk{background:rgba(255,255,255,.07);border:1px solid #ffffff24;box-shadow:none}.wide{width:100%}.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.fields label{font-size:12px;color:#bca9e6}.vline{height:1px;background:rgba(255,255,255,.13);margin:16px 0}.navonly{font-size:12px;color:#cdbbe3}.who{color:#dfd5ee;font-size:12px}
+@media(max-width:760px){.app{display:block}nav#nv{position:fixed;z-index:50;top:0;bottom:0;left:0;width:min(280px,85vw);height:100dvh;transform:translateX(-105%);transition:transform .18s;box-shadow:15px 0 30px #05000c77}.app.menu-open nav#nv{transform:translateX(0)}main{padding:16px}.top{gap:8px;flex-wrap:wrap}.top h2{font-size:18px}.who{margin-left:auto}} 
+</style></head><body><div id="root"><div class="lg">Loading…</div></div>
 <script>
-document.getElementById('akiraSearchBtn').onclick=async()=>{
- const id=document.getElementById('akiraSearchId').value.trim();
- const out=document.getElementById('akiraSearchResult');
- if(!/^\d{6}$/.test(id)){out.textContent='Enter a valid 6-digit User ID';return;}
- out.textContent='Searching...';
- try{
-  const r=await fetch('/api/v1/admin/users/search?id='+encodeURIComponent(id),{
-   headers:{Authorization:'Bearer '+activeToken},
-   signal:AbortSignal.timeout(15000)
-  });
-  const d=await r.json();
-  if(!r.ok)throw Error(d.error||'Search failed');
-  out.textContent=d.user?JSON.stringify(d.user,null,2):'User not found';
- }catch(e){out.textContent=e.message;}
-};
+'use strict';
+const API='https://api.soverixnet.online';
+const pages=[
+ ['Overview','dash','📊 Dashboard'],['Overview','analytics','📈 Analytics'],
+ ['People','users','👥 Users'],['People','sellers','🪙 Coin Sellers'],['People','support','🎧 Support Inbox'],['People','moderation','🛡️ Moderation'],
+ ['Money','recharge','💳 Wallet Recharge'],['Money','packages','💵 Packages & Exchange'],['Money','ledger','📒 Ledger'],['Money','store','🛍️ Store'],['Money','promos','🏷️ Promo Codes'],
+ ['Rooms','rooms','🏠 Rooms'],['Rooms','events','🎉 Events'],['Rooms','themes','🎨 Themes & Backgrounds'],['Rooms','gifts','🎁 Gifts'],['Rooms','room-rewards','💰 Room Rewards'],['Rooms','rankings','🏆 Rankings'],['Rooms','levels','⭐ Levels & VIP'],['Rooms','tasks','📅 Tasks & Invites'],
+ ['Games','lucky','🍀 Lucky Gifts'],['Games','games','🎮 Games'],
+ ['App','banners','🖼️ Banners'],['App','notifications','🔔 Notifications'],['App','legal','📄 Legal & Help'],['App','settings','⚙️ Feature Switches'],
+ ['Security','roles','🔐 Admin Roles'],['Security','audit','📜 Audit Log'],['Security','reports','🛡️ User Reports'],['Security','deletion','🗑️ Account Deletion'],['Security','system','🖥️ System']
+];
+const root=document.querySelector('#root');
+let token='',role='',currentPage='dash';
+const el=(tag,cls,content)=>{const x=document.createElement(tag);if(cls)x.className=cls;if(content!==undefined)x.textContent=String(content);return x};
+const $=s=>document.querySelector(s);
+function setStatus(message,bad=false){const x=$('#status');if(x){x.textContent=message;x.className='status '+(bad?'err':'ok')}}
+const checkId=s=>/^\d{6}$/.test(String(s).trim());
+const checkAmount=s=>{const n=Number(s);return Number.isSafeInteger(n)&&n>0?n:null};
+async function call(path,options={}){
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+ try{const response=await fetch(API+path,{...options,signal:controller.signal,headers:{...(token?{Authorization:'Bearer '+token}:{}),...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})}});
+ let data;try{data=await response.json()}catch{data={}};
+ if(!response.ok)throw Error(data.error||('HTTP '+response.status));return data;
+ }catch(err){if(err.name==='AbortError')throw Error('Request timed out. Confirm balance before retrying.');throw err;}finally{clearTimeout(timer)}
+}
+const post=(path,body)=>call(path,{method:'POST',body:JSON.stringify(body)});
+function requestId(){
+ if(crypto.randomUUID)return crypto.randomUUID();
+ const a=crypto.getRandomValues(new Uint8Array(16));
+ a[6]=(a[6]&15)|64;a[8]=(a[8]&63)|128;
+ const h=Array.from(a,x=>x.toString(16).padStart(2,'0'));
+ return h.slice(0,4).join('')+'-'+h.slice(4,6).join('')+'-'+h.slice(6,8).join('')+'-'+h.slice(8,10).join('')+'-'+h.slice(10).join('');
+}
 
-const api='https://api.soverixnet.online';
-let activeToken=null;
-async function akiraFetch(url, options={}) {
- const controller=new AbortController();
- const timer=setTimeout(()=>controller.abort(),15000);
- try {
-  return await fetch(url,{...options,signal:controller.signal});
- } catch(error) {
-  if(error.name==='AbortError') throw Error('Server request timed out after 15 seconds');
-  throw error;
- } finally {
-  clearTimeout(timer);
+function button(text,fn,cls='btn s'){const b=el('button',cls,text);b.type='button';b.addEventListener('click',fn);return b}
+function input(parent,label,placeholder,typ='text'){
+ const wrap=el('label');wrap.textContent=label;const x=el('input');x.type=typ;x.placeholder=placeholder||label;x.autocomplete='off';wrap.appendChild(x);parent.appendChild(wrap);return x;
+}
+function card(title){const c=el('section','card');c.appendChild(el('h3','',title));$('#pg').appendChild(c);return c}
+function line(parent,label,value){const r=el('div','rowline');r.appendChild(el('div','',label));r.appendChild(el('strong','',String(value??'—')));parent.appendChild(r)}
+function checkSuper(){if(role!=='super_admin'){setStatus('Super Admin permission required.',true);return false}return true}
+function notice(text){const n=el('div','note',text);$('#pg').appendChild(n)}
+function loginPage(){token='';role='';root.innerHTML='';const screen=el('div','lg'),panel=el('section','lgc');panel.appendChild(el('div','brand-icon','✦'));panel.appendChild(el('h1','','Akira Admin Control Center'));panel.appendChild(el('p','','Secure connection to your Akira account'));
+ const form=el('form');const email=input(form,'Email','Admin email','email');email.autocomplete='username';const password=input(form,'Password','Password','password');password.autocomplete='current-password';const msg=el('p','status err');const submit=el('button','btn wide','Sign In');submit.type='submit';form.append(submit,msg);panel.appendChild(form);screen.appendChild(panel);root.appendChild(screen);
+ form.addEventListener('submit',async event=>{event.preventDefault();submit.disabled=true;msg.textContent='Signing in…';try{const result=await post('/api/v1/auth/login',{email:email.value.trim(),password:password.value});token=result.token||'';if(!token)throw Error('Missing login token');const dash=await call('/api/v1/admin/dashboard');role=dash.role;if(!role)throw Error('No admin role assigned');renderShell();render('dash',dash)}catch(err){token='';msg.textContent=err.message==='admin_forbidden'?'Account is not an administrator.':err.message}finally{submit.disabled=false}})
+}
+function renderShell(){root.innerHTML='';const shell=el('div','app');shell.id='shell';const nav=el('nav');nav.id='nv';const brand=el('div','br');const logo=el('div','brand-icon','✦');const label=el('div');label.append(el('b','','Akira'),el('small','','Admin Control Center'));brand.append(logo,label);nav.appendChild(brand);let section='';for(const [group,key,title] of pages){if(group!==section){nav.appendChild(el('div','nav-section',group));section=group}const a=el('a','',title);a.href='#'+key;a.dataset.page=key;a.onclick=e=>{e.preventDefault();render(key);shell.classList.remove('menu-open')};nav.appendChild(a)}
+ const main=el('main');const top=el('div','top');top.append(button('☰',()=>shell.classList.toggle('menu-open'),'btn o s'));const heading=el('h2');heading.id='heading';top.appendChild(heading);top.appendChild(el('div','sp'));top.appendChild(el('div','who','Role: '+role));top.append(button('Log out',async()=>{try{await call('/api/v1/auth/logout',{method:'POST'})}catch{}loginPage()},'btn o s'));main.append(top,el('div'));main.lastChild.id='pg';shell.append(nav,main);root.appendChild(shell)
+}
+async function render(page,initial){currentPage=page;document.querySelectorAll('[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));const entry=pages.find(p=>p[1]===page);$('#heading').textContent=entry?.[2]||'Admin';$('#pg').replaceChildren();try{switch(page){case 'dash':await dashPage(initial);break;case 'users':await usersPage();break;case 'sellers':await sellersPage();break;case 'recharge':await rechargePage();break;case 'roles':await rolesPage();break;case 'audit':await auditPage();break;case 'reports':await reportsPage();break;case 'deletion':await deletionPage();break;case 'rooms':await roomsPage();break;case 'games':await gamesPage();break;default:plannedPage()}}catch(err){notice('Unable to load this section: '+err.message)}}
+async function dashPage(initial){const data=initial||await call('/api/v1/admin/dashboard');const stats=data.stats||{};const c=card('Live Database Statistics');line(c,'Registered users',stats.users);line(c,'Rooms',stats.rooms);line(c,'Signed-in role',data.role);notice('Only verified API values are displayed. Online users, revenue and game metrics require additional backend endpoints.');const actions=card('Quick Actions');actions.append(button('Find user',()=>render('users')),button('Coin sellers',()=>render('sellers')),button('Wallet recharge',()=>render('recharge')))}
+async function usersPage(){const c=card('Find account by 6-digit ID');const fields=el('div','fields');const uid=input(fields,'User ID','100001');const actions=el('div','controls');const result=el('div');actions.append(button('Search user',async()=>{result.replaceChildren();if(!checkId(uid.value)){result.textContent='Enter a valid 6-digit ID';return}try{const d=await call('/api/v1/admin/users/search?id='+encodeURIComponent(uid.value.trim()));if(!d.user){result.textContent='User not found';return}line(result,'ID',d.user.public_id);line(result,'Name',d.user.display_name);line(result,'Country',d.user.country_code||'-')}catch(e){result.textContent=e.message}}));
+ actions.append(button('Recent users',async()=>{result.replaceChildren();try{const d=await call('/api/v1/admin/users');for(const u of d.users||[])line(result,(u.display_name||'User')+' · '+u.public_id,u.country_code||'—')}catch(e){result.textContent=e.message}},'btn o s'));c.append(fields,actions,result);
+ if(role==='super_admin'){const bc=card('User ban / unban');const id=input(bc,'User ID','100001');const controls=el('div','controls');for(const [word,banned] of [['Ban user',true],['Unban user',false]])controls.append(button(word,async()=>{if(!checkId(id.value)){setStatus('Invalid User ID',true);return}if(!confirm((banned?'Ban':'Unban')+' user '+id.value+'?'))return;try{await post('/api/v1/admin/users/ban',{publicId:id.value.trim(),banned});setStatus('User status updated.')}catch(e){setStatus(e.message,true)}},banned?'btn r s':'btn k s'));bc.append(controls);bc.appendChild(el('p','status'));bc.lastChild.id='status'} }
+async function sellersPage(){const list=card('Verified Coin Seller List');const r=await call('/api/v1/sellers');const arr=r.sellers||[];list.appendChild(el('p','subtle',arr.length+' active sellers'));if(!arr.length)list.appendChild(el('p','','No active sellers yet.'));for(const s of arr)line(list,s.displayName||'Coin Seller','ID '+s.publicId);if(role!=='super_admin'){notice('Only Super Admin can manage sellers.');return}
+ const access=card('Seller permissions');
+ access.appendChild(el('p','subtle','Enable or disable a seller account without changing the coin balance.'));
+ const accessFields=el('div','fields'), sellerId=input(accessFields,'Seller 6-digit User ID','100001');
+ access.appendChild(accessFields);
+ const statusButtons=el('div','controls');
+ const accessMessage=el('p','status');
+ for(const [title,enabled] of [['Enable seller',true],['Disable seller',false]]){
+   const action=button(title,async()=>{
+     const id=sellerId.value.trim();
+     if(!checkId(id)){accessMessage.textContent='Enter a valid 6-digit User ID.';return}
+     if(!confirm((enabled?'Enable':'Disable')+' seller '+id+'?'))return;
+     action.disabled=true;accessMessage.textContent='Saving seller access...';
+     try{
+       const result=await post('/api/v1/admin/sellers/status',{publicId:id,enabled});
+       accessMessage.textContent=result.enabled?'Seller enabled.':'Seller disabled.';
+       const latest=await call('/api/v1/sellers');
+       list.replaceChildren(el('h3','','Verified Coin Seller List'));
+       const active=latest.sellers||[];list.appendChild(el('p','subtle',active.length+' active sellers'));
+       for(const x of active)line(list,x.displayName||'Coin Seller','ID '+x.publicId);
+     }catch(err){accessMessage.textContent='Unable to change seller status: '+err.message}
+     finally{action.disabled=false}
+   },enabled?'btn k s':'btn r s');
+   statusButtons.appendChild(action);
+ }
+ access.append(statusButtons,accessMessage);
+ const c=card('Allocate Seller Balance');c.appendChild(el('p','subtle','Credits SELLER inventory, not the personal wallet. Activate the seller separately using Seller permissions before they can send coins.'));
+ const f=el('div','fields');const id=input(f,'Seller User ID','100001');const amount=input(f,'Seller coin amount','Positive integer','number');c.appendChild(f);let pending=null;
+ const submit=button('Allocate seller coins',async()=>{const n=checkAmount(amount.value),uid=id.value.trim();if(!checkId(uid)||!n){setStatus('Enter valid Seller ID and amount.',true);return}if(!confirm('Add '+n+' SELLER coins to ID '+uid+'? Seller permission is managed separately.'))return;submit.disabled=true;try{const k=uid+':'+n;if(!pending||pending.key!==k)pending={key:k,id:requestId()};const r=await post('/api/v1/admin/sellers/allocate',{publicId:uid,amount:n,requestId:pending.id});setStatus('Seller balance: '+Number(r.balance).toLocaleString());pending=null;await render('sellers')}catch(e){setStatus('Allocation not confirmed: '+e.message,true)}finally{submit.disabled=false}});c.append(submit);const status=el('p','status');status.id='status';c.appendChild(status)}
+async function rechargePage(){notice('Direct Super Admin recharge is available. Pending payment requests/approvals need separate backend endpoints.');if(role!=='super_admin'){notice('Super Admin permission required.');return}const c=card('Credit original user wallet');const f=el('div','fields');const id=input(f,'User ID','100001');const amount=input(f,'Coins to recharge','Positive integer','number');c.appendChild(f);let pending=null;const b=button('Credit wallet',async()=>{const uid=id.value.trim(),n=checkAmount(amount.value);if(!checkId(uid)||!n){setStatus('Invalid User ID or amount',true);return}if(!confirm('CREDIT '+n+' coins to the ORIGINAL wallet of '+uid+'?'))return;b.disabled=true;try{const k=uid+':'+n;if(!pending||pending.key!==k)pending={key:k,id:requestId()};const out=await post('/api/v1/admin/wallet/recharge',{publicId:uid,amount:n,requestId:pending.id});setStatus('Wallet credited. Balance: '+Number(out.wallet?.balance??0).toLocaleString());pending=null}catch(e){setStatus('Not confirmed: '+e.message,true)}finally{b.disabled=false}});c.append(b);const s=el('p','status');s.id='status';c.appendChild(s)}
+async function rolesPage(){if(role!=='super_admin'){notice('Super Admin permission required.');return}const c=card('Assigned admin roles');const data=await call('/api/v1/admin/roles');for(const x of data.roles||[])line(c,(x.display_name||'Admin')+' · '+x.public_id,x.role);const f=card('Change role');const fields=el('div','fields');const id=input(fields,'User ID','100001');const label=el('label','','Access level');const sel=el('select');for(const option of ['moderator','manager','admin','remove']){const o=el('option','',option);o.value=option;sel.appendChild(o)}label.appendChild(sel);fields.appendChild(label);f.appendChild(fields);f.append(button('Save role',async()=>{if(!checkId(id.value)){setStatus('Invalid User ID',true);return}if(!confirm('Set role '+sel.value+' for '+id.value+'?'))return;try{await post('/api/v1/admin/roles',{publicId:id.value.trim(),role:sel.value});await render('roles')}catch(e){setStatus(e.message,true)}}));const s=el('p','status');s.id='status';f.appendChild(s)}
+async function auditPage(){if(role!=='super_admin'){notice('Super Admin permission required.');return}const r=await call('/api/v1/admin/audit');const c=card('Server Audit History');for(const x of r.events||[])line(c,(x.action||'Action')+' · '+(x.target_id||''),new Date(x.created_at).toLocaleString());if(!(r.events||[]).length)c.appendChild(el('p','','No audit events.'));notice('This list shows the real server audit endpoint, not the local demo log.')}
+async function roomsPage(){
+ const r=await call('/api/v1/rooms'),list=card('Live Room Directory');
+ for(const x of r.rooms||[])line(list,x.name||'Room','ID '+x.id+' · '+(x.isLocked?'Locked':'Open')+' · '+x.seatCount+' seats');
+ if(!(r.rooms||[]).length)list.appendChild(el('p','','No active rooms found.'));
+ if(role!=='super_admin'){notice('Room management requires Super Admin.');return}
+ const c=card('Manage Live Room');
+ c.appendChild(el('p','subtle','Changes are saved to Akira rooms on the server, with an audit record. Voice participants and coin balances are not changed by lock or theme updates.'));
+ const fields=el('div','fields');
+ const id=input(fields,'Room ID','100001');
+ const lock=el('label','','Room access'),lockChoice=el('select');
+ for(const [value,title] of [['unchanged','Keep current lock state'],['true','Lock room'],['false','Unlock room']]){
+   const opt=el('option','',title);opt.value=value;lockChoice.appendChild(opt);
+ }
+ lock.appendChild(lockChoice);fields.appendChild(lock);
+ const seats=el('label','','Seat count'),seatsChoice=el('select');
+ for(const [value,title] of [['unchanged','Keep current seat count'],['5','5 seats'],['10','10 seats'],['12','12 seats']]){
+   const opt=el('option','',title);opt.value=value;seatsChoice.appendChild(opt);
+ }
+ seats.appendChild(seatsChoice);fields.appendChild(seats);
+ const theme=el('label','','Room theme'),themeChoice=el('select');
+ for(const value of ['unchanged','mid','gold','ocean','rose','forest','sunset']){
+   const opt=el('option','',value==='unchanged'?'Keep current theme':value);opt.value=value;themeChoice.appendChild(opt);
+ }
+ theme.appendChild(themeChoice);fields.appendChild(theme);c.appendChild(fields);
+ const status=el('p','status');c.appendChild(status);
+ const save=button('Save Room Settings',async()=>{
+  const publicId=id.value.trim();if(!checkId(publicId)){status.textContent='Enter a valid 6-digit room ID.';return}
+  const payload={publicId};
+  if(lockChoice.value!=='unchanged')payload.locked=lockChoice.value==='true';
+  if(seatsChoice.value!=='unchanged')payload.seatCount=Number(seatsChoice.value);
+  if(themeChoice.value!=='unchanged')payload.themeKey=themeChoice.value;
+  if(Object.keys(payload).length===1){status.textContent='Choose at least one setting to update.';return}
+  if(!confirm('Apply these server room settings to room '+publicId+'?'))return;
+  save.disabled=true;status.textContent='Saving room settings...';
+  try{const result=await post('/api/v1/admin/rooms/update',payload);
+    status.textContent='Saved room '+result.room.id+' · '+result.room.seatCount+' seats · '+(result.room.isLocked?'Locked':'Open');
+  }catch(err){status.textContent='Unable to save room: '+err.message}
+  finally{save.disabled=false}
+ });
+ c.appendChild(save);
+}
+async function gamesPage(){
+ const result=await call('/api/v1/admin/game-status');
+ const c=card('Live Game Engine — Read Only');
+ line(c,'Settlement engine',result.enabled?'Enabled':'Disabled');
+ for(const g of result.games||[]){
+  const round=g.round;
+  line(c,g.name,round?'Round '+round.id+' · '+(round.settledAt?'Settled':'In progress'):'No game rounds yet');
+ }
+ notice('This panel reads the real game engine. Results and coin payouts are server-controlled. Game odds, bet edits and winner manipulation are not available.');
+}
+
+async function reportsPage(){
+ const c=card('Voice Chat User Reports');
+ c.appendChild(el('p','subtle','Verified user reports from the Akira database. Ban/restrict an account only after review using User Management.'));
+ const result=await call('/api/v1/admin/reports');
+ const list=result.reports||[];
+ c.appendChild(el('p','subtle',list.length+' recent reports'));
+ if(!list.length)c.appendChild(el('p','','No reports recorded.'));
+ for(const r of list){
+  const row=el('div','rowline');
+  row.append(el('span','',String(r.reportedId)+' · '+r.reason),el('small','',String(r.status)));
+  c.appendChild(row);
+  if(r.details)c.appendChild(el('p','subtle',String(r.details).slice(0,500)));
  }
 }
-document.getElementById('loginForm').addEventListener('submit',async event=>{
- event.preventDefault();
- const msg=document.getElementById('message');
- msg.textContent='Signing in...';
- const email=document.getElementById('email').value.trim();
- const password=document.getElementById('password').value;
- try{
-  const loginResponse=await akiraFetch(api+'/api/v1/auth/login',{
-   method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({email,password})
-  });
-  const loginData=await loginResponse.json();
-  if(!loginResponse.ok || !loginData.token)throw Error('Login failed (HTTP '+loginResponse.status+'): '+(loginData.error||'No token returned'));
-  const token=loginData.token;
-  const adminResponse=await akiraFetch(api+'/api/v1/admin/dashboard',{
-   headers:{Authorization:'Bearer '+token}
-  });
-  const data=await adminResponse.json();
-  if(!adminResponse.ok){
-   await fetch(api+'/api/v1/auth/logout',{method:'POST',headers:{Authorization:'Bearer '+token}}).catch(()=>{});
-   throw Error(adminResponse.status===403?'This account is not an admin':'Admin access denied');
-  }
-  activeToken=token;
-  document.getElementById('users').textContent=data.stats.users;
-  document.getElementById('rooms').textContent=data.stats.rooms;
-  document.getElementById('role').textContent='Role: '+data.role;
-  document.getElementById('password').value='';
-  document.getElementById('login').style.display='none';
-  document.getElementById('dashboard').style.display='block';
-  document.getElementById('akiraUserSearch').style.display='block';
-  document.getElementById('akiraRolesPanel').style.display=data.role==='super_admin'?'block':'none';
-  document.getElementById('akiraSellerAllocation').style.display=data.role==='super_admin'?'block':'none';
-  msg.textContent='';
- }catch(error){msg.textContent=error.message;document.getElementById('password').value='';}
-});
-document.getElementById('logout').onclick=async()=>{
- const token=activeToken;
- activeToken=null;
- document.getElementById('dashboard').style.display='none';
- document.getElementById('akiraUserSearch').style.display='none';
- document.getElementById('akiraRolesPanel').style.display='none';
- document.getElementById('akiraSellerAllocation').style.display='none';
- document.getElementById('login').style.display='block';
- if(token)await fetch(api+'/api/v1/auth/logout',{method:'POST',headers:{Authorization:'Bearer '+token}}).catch(()=>{});
-};
-
-document.getElementById('akiraAllUsersBtn').onclick=async()=>{
- const out=document.getElementById('akiraAllUsersResult');
- out.textContent='Loading users...';
- try{
-  const r=await fetch('/api/v1/admin/users',{
-   headers:{Authorization:'Bearer '+activeToken},
-   signal:AbortSignal.timeout(15000)
-  });
-  const d=await r.json();
-  if(!r.ok)throw Error(d.error||'Failed to load users');
-  out.replaceChildren();
-  for(const u of d.users||[]){
-   const card=document.createElement('div');
-   card.style.cssText='padding:12px;margin:8px 0;border:1px solid #555;border-radius:12px';
-   card.textContent='ID: '+u.public_id+' | '+(u.display_name||'Unnamed')+' | '+(u.country_code||'No country');
-   out.appendChild(card);
-  }
-  if(!d.users?.length)out.textContent='No users found';
- }catch(e){out.textContent=e.message;}
-};
-
-async function akiraSetBan(banned){
- const id=document.getElementById('akiraBanId').value.trim();
- const out=document.getElementById('akiraBanResult');
- if(!/^\d{6}$/.test(id)){
-  out.textContent='Enter a valid 6-digit User ID';
-  return;
- }
- const action=banned?'BAN':'UNBAN';
- if(!confirm(action+' user '+id+'?'))return;
- out.textContent='Processing...';
- try{
-  const r=await fetch('/api/v1/admin/users/ban',{
-   method:'POST',
-   headers:{
-    'Content-Type':'application/json',
-    Authorization:'Bearer '+activeToken
-   },
-   body:JSON.stringify({publicId:id,banned}),
-   signal:AbortSignal.timeout(15000)
-  });
-  const d=await r.json();
-  if(!r.ok)throw Error(d.error||'Request failed');
-  out.textContent='User '+id+(banned?' banned':' unbanned')+' successfully';
- }catch(e){out.textContent='Error: '+e.message;}
+async function deletionPage(){
+ if(role!=='super_admin'){notice('Super Admin permission required.');return}
+ const c=card('Account Deletion Requests');
+ c.appendChild(el('p','subtle','Requests must be fulfilled according to the privacy policy. Viewing this queue does NOT delete user accounts.'));
+ const result=await call('/api/v1/admin/deletion-requests');
+ const list=result.requests||[];
+ c.appendChild(el('p','subtle',list.length+' recent requests'));
+ if(!list.length)c.appendChild(el('p','','No account deletion requests.'));
+ for(const r of list)line(c,String(r.publicId)+' · '+String(r.displayName||'User'),String(r.status)+' · '+new Date(r.requestedAt).toLocaleDateString());
 }
-document.getElementById('akiraBanBtn').onclick=()=>akiraSetBan(true);
-document.getElementById('akiraUnbanBtn').onclick=()=>akiraSetBan(false);
-
-document.getElementById('akiraRoleSave').onclick=async()=>{
- const id=document.getElementById('akiraRoleId').value.trim();
- const role=document.getElementById('akiraRoleChoice').value;
- const out=document.getElementById('akiraRoleResult');
- if(!/^\d{6}$/.test(id)){out.textContent='Enter a valid 6-digit User ID';return;}
- if(!confirm('Set role '+role+' for user '+id+'?'))return;
- try{
-  const r=await akiraFetch('/api/v1/admin/roles',{method:'POST',headers:{Authorization:'Bearer '+activeToken,'Content-Type':'application/json'},body:JSON.stringify({publicId:id,role})});
-  const d=await r.json();if(!r.ok)throw Error(d.error||'Update failed');
-  out.textContent='Role saved: '+id+' → '+role;
- }catch(e){out.textContent='Error: '+e.message;}
-};
-document.getElementById('akiraRoleRefresh').onclick=async()=>{
- const out=document.getElementById('akiraRoleResult');out.textContent='Loading...';
- try{
-  const headers={Authorization:'Bearer '+activeToken};
-  const [rr,ar]=await Promise.all([akiraFetch('/api/v1/admin/roles',{headers}),akiraFetch('/api/v1/admin/audit',{headers})]);
-  const roles=await rr.json(),audit=await ar.json();
-  if(!rr.ok||!ar.ok)throw Error(roles.error||audit.error||'Request failed');
-  out.textContent='ROLES\n'+(roles.roles||[]).map(x=>x.public_id+' '+x.display_name+' — '+x.role).join('\n')+'\n\nRECENT AUDIT\n'+(audit.events||[]).map(x=>x.created_at+' '+x.action+' '+x.target_id).join('\n');
- }catch(e){out.textContent='Error: '+e.message;}
-};
-document.getElementById('akiraSellerAllocateBtn').onclick=async()=>{
- const id=document.getElementById('akiraSellerId').value.trim();
- const amount=Number(document.getElementById('akiraSellerCoins').value);
- const out=document.getElementById('akiraSellerAllocateResult');
- if(!/^\d{6}$/.test(id)||!Number.isSafeInteger(amount)||amount<=0){out.textContent='Enter valid 6-digit Seller ID and coin amount.';return;}
- if(!confirm('Add '+amount+' SELLER coins to '+id+'? Personal Wallet will not change.'))return;
- const btn=document.getElementById('akiraSellerAllocateBtn');btn.disabled=true;out.textContent='Allocating…';
- try{
-  const r=await akiraFetch('/api/v1/admin/sellers/allocate',{method:'POST',headers:{Authorization:'Bearer '+activeToken,'Content-Type':'application/json'},body:JSON.stringify({publicId:id,amount,requestId:crypto.randomUUID()})});
-  const data=await r.json();if(!r.ok)throw Error(data.error||'Allocation failed');
-  out.textContent='Success! Seller balance: '+Number(data.balance).toLocaleString();
- }catch(e){out.textContent='Failed: '+e.message;}finally{btn.disabled=false;}
-};
+function plannedPage(){const p=pages.find(x=>x[1]===currentPage);const name=p?p[2]:'Feature';notice(name+' is not connected yet. This feature cannot change Akira until its protected backend API and database operations are implemented and tested.');const c=card('Implementation status');line(c,'Feature',name);line(c,'Current state','Read-only placeholder · Not live');line(c,'Required','Authenticated endpoint + authorization + server-side validation');line(c,'Rollout','Backup → tests → staging → production')}
+loginPage();
 </script></body></html>

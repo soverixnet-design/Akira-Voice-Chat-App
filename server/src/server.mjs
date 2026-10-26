@@ -12,6 +12,7 @@ import { randomUUID, createHmac } from 'node:crypto';
 import { createRoom, joinRoom, leaveRoom } from './rooms.mjs';
 import {roomSeats,setSeat,updateRoomSettings} from './room-seats.mjs';
 import {deletionRequestStatus,submitDeletionRequest} from './account-deletion.mjs';
+import {dailyRewardStatus,claimDailyReward} from './daily-rewards.mjs';
 import { pathToFileURL } from 'node:url';
 
 const port = Number(process.env.PORT || 4301);
@@ -78,6 +79,19 @@ export const requestHandler = async (req, res) => {
       const result=await submitDeletionRequest(user.id,body);
       return send(result.status,result.body);
     }catch(err){console.error('account_deletion_request_failed',err.code||err.message);return send(503,{error:'account_deletion_request_unavailable'})}
+  }
+  if(url.pathname==='/api/v1/rewards/daily'){
+    try{
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      if(req.method==='GET'){
+        const result=await dailyRewardStatus(user.id);
+        return send(result.status,result.body);
+      }
+      if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+      const result=await claimDailyReward(user.id);
+      return send(result.status,result.body);
+    }catch(err){console.error('daily_reward_failed',err.code||err.message);return send(503,{error:'daily_reward_unavailable'})}
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/sellers') {
     try {

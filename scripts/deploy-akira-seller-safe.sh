@@ -69,6 +69,39 @@ echo '=== GUARD EXISTING USER CUSTOMIZATIONS ==='
 conflicts=0
 for f in "${FILES[@]}"; do
   [[ -f "$REVIEW/$f" ]] || { echo "ERROR: Missing candidate $f"; conflicts=$((conflicts+1)); continue; }
+  if [[ "$f" == "server/package.json" && -f "$ROOT/$f" ]] && ! cmp -s "$ROOT/$f" "$REVIEW/$f"; then
+    # Merge only required dependency declarations into the candidate staging
+    # manifest. Preserve every local script and extra package, and abort if
+    # an existing required dependency has a different version.
+    if python3 - "$ROOT/$f" "$REVIEW/$f" <<'PY'
+import json,sys
+from pathlib import Path
+live,candidate=map(Path,sys.argv[1:])
+a=json.loads(live.read_text())
+b=json.loads(candidate.read_text())
+for field in ('name','type'):
+    if a.get(field)!=b.get(field):
+        raise SystemExit(f'PACKAGE CONFLICT: {field} differs — manual inspection required')
+for script in ('start','test'):
+    if a.get('scripts',{}).get(script)!=b.get('scripts',{}).get(script):
+        raise SystemExit(f'PACKAGE CONFLICT: script {script} differs — manual inspection required')
+for section in ('dependencies','devDependencies','optionalDependencies'):
+    existing=a.setdefault(section,{})
+    required=b.get(section,{})
+    for pkg,version in required.items():
+        if pkg in existing and existing[pkg]!=version:
+            raise SystemExit(f'PACKAGE CONFLICT: {pkg} has a different declared version — manual inspection required')
+        existing.setdefault(pkg,version)
+candidate.write_text(json.dumps(a,indent=2,ensure_ascii=False)+'\n')
+print('SAFE MERGE: Package metadata and installed packages kept; only missing required dependencies added to staging')
+PY
+    then
+      continue
+    else
+      conflicts=$((conflicts+1))
+      continue
+    fi
+  fi
   if [[ -e "$ROOT/$f" ]]; then
     # The prior successful guarded release may already have installed this exact
     # candidate file. Git status will still call it 'modified' versus old HEAD.

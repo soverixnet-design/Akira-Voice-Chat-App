@@ -61,6 +61,16 @@ if [[ "$SCHEMA_READY" != 't' ]]; then
   exit 1
 fi
 echo 'Verified original wallet and seller balances tables.'
+echo '=== CHECK FINANCE ADMIN ROLE (READ ONLY) ==='
+SUPERADMIN_COUNT="$(docker exec akira-postgres psql -U akira -d akira_db -Atc \
+  "SELECT count(*) FROM akira_admin_roles WHERE role='super_admin';")"
+if ! [[ "$SUPERADMIN_COUNT" =~ ^[0-9]+$ ]] || [[ "$SUPERADMIN_COUNT" -lt 1 ]]; then
+  echo 'STOP: No Akira super_admin role in database. Finance login cannot authorize credits.' >&2
+  echo 'Set up an authorized Super Admin account before installing this page.' >&2
+  exit 1
+fi
+echo "Verified $SUPERADMIN_COUNT Super Admin account(s)."
+
 echo '=== COPY REVIEWED GITHUB FINANCE PAGE ==='
 git -C "$ROOT" fetch origin "$BRANCH"
 git -C "$ROOT" show FETCH_HEAD:web/admin-finance.html > "$TMP"

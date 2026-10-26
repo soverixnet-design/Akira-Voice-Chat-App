@@ -5,6 +5,7 @@ import { placeGameBet } from './game-bets.mjs';
 import { startGameEngine } from './game-engine.mjs';
 import { profileRoutes } from './profiles.mjs';
 import { requireAdmin, adminStats } from './admin.mjs';
+import {adminUpdateRoom} from './admin-room-control.mjs';
 import http from 'node:http';
 import { listRooms, getRoom, getPool } from './database.mjs';
 import { register, login, authenticate, logout, profile } from './auth.mjs';
@@ -406,6 +407,34 @@ export const requestHandler = async (req, res) => {
        'SELECT d.id,d.requested_at AS "requestedAt",d.status,u.public_id::text AS "publicId",u.display_name AS "displayName" FROM akira_account_deletion_requests d JOIN akira_users u ON u.id=d.user_id ORDER BY d.requested_at DESC LIMIT 100');
       return send(200,{requests:rows});
     }catch(err){console.error('deletion_queue_failed',err.message);return send(503,{error:'deletion_queue_unavailable'})}
+  }
+  if (req.method==='POST' && url.pathname==='/api/v1/admin/rooms/update'){
+    try{
+      const admin=await requireAdmin(req.headers.authorization);
+      if(admin.error)return send(admin.status,{error:admin.error});
+      if(admin.role!=='super_admin')return send(403,{error:'super_admin_required'});
+      let raw='';
+      for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+      let body;try{body=JSON.parse(raw)}catch{return send(400,{error:'invalid_json'})}
+      const result=await adminUpdateRoom(admin.user.id,body);
+      return send(result.status,result.body);
+    }catch(err){console.error('admin_room_update_failed',err.code||err.message);return send(503,{error:'room_control_unavailable'})}
+  }
+  if (req.method==='GET' && url.pathname==='/api/v1/admin/game-status'){
+    try{
+      const admin=await requireAdmin(req.headers.authorization);
+      if(admin.error)return send(admin.status,{error:admin.error});
+      const names=[
+        {name:'food-wheel',table:'akira_food_rounds'},
+        {name:'jackpot-fruit',table:'akira_jackpot_rounds'}
+      ];
+      const games=[];
+      for(const {name,table} of names){
+        const {rows}=await getPool().query(`SELECT id::text, starts_at AS "startsAt",betting_ends_at AS "endsAt",settled_at AS "settledAt" FROM ${table} ORDER BY id DESC LIMIT 1`);
+        games.push({name,round:rows[0]||null});
+      }
+      return send(200,{enabled:process.env.AKIRA_GAME_ENGINE_ENABLED==='true',games});
+    }catch(err){console.error('admin_games_failed',err.code||err.message);return send(503,{error:'game_status_unavailable'})}
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/admin/dashboard') {
     try {

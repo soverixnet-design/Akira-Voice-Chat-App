@@ -6,6 +6,11 @@ const checks=[
  {name:'Protected original wallet',path:'/api/v1/wallet',expected:401,valid:d=>d.error==='unauthorized'},
  {name:'Protected seller wallet',path:'/api/v1/seller/wallet',expected:401,valid:d=>d.error==='unauthorized'},
  {name:'Protected admin dashboard',path:'/api/v1/admin/dashboard',expected:401,valid:d=>d.error==='unauthorized'},
+ {name:'Protected room seats',path:'/api/v1/rooms/100001/seats',expected:401,valid:d=>d.error==='unauthorized'},
+ {name:'Protected game round',path:'/api/v1/games/food-wheel/round',expected:401,valid:d=>d.error==='unauthorized'},
+ {name:'Protected account deletion',path:'/api/v1/account/deletion-request',expected:401,valid:d=>d.error==='unauthorized'},
+ {name:'Google sign-in configuration',path:'/api/v1/auth/google/config',expected:200,valid:d=>typeof d.enabled==='boolean'},
+ {name:'Live room directory',path:'/api/v1/rooms',expected:200,valid:d=>Array.isArray(d.rooms)},
 ];
 let failed=0;
 for(const test of checks){

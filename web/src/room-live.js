@@ -146,7 +146,11 @@
  document.addEventListener('click',e=>{
   if(!e.target?.closest?.('#sheet #snd'))return;
   e.preventDefault();e.stopImmediatePropagation();
-  notify('Gifts are unavailable until real wallet gifting is enabled.');
+  if(typeof window.__akiraSafeGiftHandler==='function'){
+    void window.__akiraSafeGiftHandler();
+  }else{
+    notify('Gifts are unavailable until real wallet gifting is enabled.');
+  }
  },true);
  // Until an authenticated message service exists, do not misrepresent local chat as global.
  document.getElementById('sendTxt')?.addEventListener('click',e=>{

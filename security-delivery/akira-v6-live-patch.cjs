@@ -18,6 +18,12 @@ function replaceRegex(path, rx, to) {
   if (matches.length !== 1) throw Error(path + ': expected 1 regex match, got ' + matches.length);
   files.set(path, body.replace(rx, to));
 }
+const home = 'web/src/app.js';
+const originalHome = current(home);
+const foundCoinLabels = originalHome.match(/bn\(coins\(\)\)/g) || [];
+if (foundCoinLabels.length !== 3) throw Error('Home coin labels changed; not patching');
+files.set(home, originalHome.replaceAll('bn(coins())',
+  '(window.akiraCompactCoins?window.akiraCompactCoins(coins()):bn(coins()))'));
 const index = 'web/index.html';
 one(index, '<script src="src/game-overlay.js?v=restore20261025"></script>', '');
 one(index, '<script src="src/admin-v4-app.js"></script>', '<script src="src/admin-v4-app.js"></script>\n<script src="src/wallet-v6.js"></script>\n<script src="src/game-overlay-v6.js"></script>');

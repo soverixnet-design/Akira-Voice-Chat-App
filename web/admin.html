@@ -84,7 +84,7 @@ function loginPage(){token='';role='';root.innerHTML='';const screen=el('div','l
 function renderShell(){root.innerHTML='';const shell=el('div','app');shell.id='shell';const nav=el('nav');nav.id='nv';const brand=el('div','br');const logo=el('div','brand-icon','✦');const label=el('div');label.append(el('b','','Akira'),el('small','','Admin Control Center'));brand.append(logo,label);nav.appendChild(brand);let section='';for(const [group,key,title] of pages){if(group!==section){nav.appendChild(el('div','nav-section',group));section=group}const a=el('a','',title);a.href='#'+key;a.dataset.page=key;a.onclick=e=>{e.preventDefault();render(key);shell.classList.remove('menu-open')};nav.appendChild(a)}
  const main=el('main');const top=el('div','top');top.append(button('☰',()=>shell.classList.toggle('menu-open'),'btn o s'));const heading=el('h2');heading.id='heading';top.appendChild(heading);top.appendChild(el('div','sp'));top.appendChild(el('div','who','Role: '+role));top.append(button('Log out',async()=>{try{await call('/api/v1/auth/logout',{method:'POST'})}catch{}loginPage()},'btn o s'));main.append(top,el('div'));main.lastChild.id='pg';shell.append(nav,main);root.appendChild(shell)
 }
-async function render(page,initial){currentPage=page;document.querySelectorAll('[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));const entry=pages.find(p=>p[1]===page);$('#heading').textContent=entry?.[2]||'Admin';$('#pg').replaceChildren();try{switch(page){case 'dash':await dashPage(initial);break;case 'users':await usersPage();break;case 'sellers':await sellersPage();break;case 'recharge':await rechargePage();break;case 'roles':await rolesPage();break;case 'audit':await auditPage();break;case 'reports':await reportsPage();break;case 'deletion':await deletionPage();break;case 'rooms':await roomsPage();break;case 'games':await gamesPage();break;default:plannedPage()}}catch(err){notice('Unable to load this section: '+err.message)}}
+async function render(page,initial){currentPage=page;document.querySelectorAll('[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));const entry=pages.find(p=>p[1]===page);$('#heading').textContent=entry?.[2]||'Admin';$('#pg').replaceChildren();try{switch(page){case 'dash':await dashPage(initial);break;case 'users':await usersPage();break;case 'sellers':await sellersPage();break;case 'recharge':await rechargePage();break;case 'roles':await rolesPage();break;case 'audit':await auditPage();break;case 'ledger':await ledgerPage();break;case 'reports':await reportsPage();break;case 'deletion':await deletionPage();break;case 'rooms':await roomsPage();break;case 'games':await gamesPage();break;default:plannedPage()}}catch(err){notice('Unable to load this section: '+err.message)}}
 async function dashPage(initial){const data=initial||await call('/api/v1/admin/dashboard');const stats=data.stats||{};const c=card('Live Database Statistics');line(c,'Registered users',stats.users);line(c,'Rooms',stats.rooms);line(c,'Signed-in role',data.role);notice('Only verified API values are displayed. Online users, revenue and game metrics require additional backend endpoints.');const actions=card('Quick Actions');actions.append(button('Find user',()=>render('users')),button('Coin sellers',()=>render('sellers')),button('Wallet recharge',()=>render('recharge')))}
 async function usersPage(){const c=card('Find account by 6-digit ID');const fields=el('div','fields');const uid=input(fields,'User ID','100001');const actions=el('div','controls');const result=el('div');actions.append(button('Search user',async()=>{result.replaceChildren();if(!checkId(uid.value)){result.textContent='Enter a valid 6-digit ID';return}try{const d=await call('/api/v1/admin/users/search?id='+encodeURIComponent(uid.value.trim()));if(!d.user){result.textContent='User not found';return}line(result,'ID',d.user.public_id);line(result,'Name',d.user.display_name);line(result,'Country',d.user.country_code||'-')}catch(e){result.textContent=e.message}}));
  actions.append(button('Recent users',async()=>{result.replaceChildren();try{const d=await call('/api/v1/admin/users');for(const u of d.users||[])line(result,(u.display_name||'User')+' · '+u.public_id,u.country_code||'—')}catch(e){result.textContent=e.message}},'btn o s'));c.append(fields,actions,result);
@@ -196,6 +196,32 @@ async function deletionPage(){
  c.appendChild(el('p','subtle',list.length+' recent requests'));
  if(!list.length)c.appendChild(el('p','','No account deletion requests.'));
  for(const r of list)line(c,String(r.publicId)+' · '+String(r.displayName||'User'),String(r.status)+' · '+new Date(r.requestedAt).toLocaleDateString());
+}
+async function ledgerPage(){
+ if(role!=='super_admin'){notice('Super Admin permission required.');return}
+ const c=card('Original wallet and transaction history');
+ const id=input(c,'User ID','100001');
+ const result=el('div');
+ const load=button('Load wallet',async()=>{
+  result.replaceChildren();
+  if(!checkId(id.value)){result.textContent='Enter a valid 6-digit ID';return}
+  load.disabled=true;
+  try{
+   const d=await call('/api/v1/admin/wallet/history?id='+encodeURIComponent(id.value.trim()));
+   line(result,'Account',d.user.displayName+' · '+d.user.publicId);
+   line(result,'Current coin balance',d.balance);
+   result.appendChild(el('p','subtle','Latest 50 transactions. Balance above is the current server balance.'));
+   if(!d.transactions.length)result.appendChild(el('p','','No transactions yet.'));
+   for(const t of d.transactions){
+    const entry=el('section','card');
+    line(entry,'Transaction',t.id);line(entry,'Change',t.delta);
+    line(entry,'Balance after',t.balanceAfter);line(entry,'Reason',t.reason);
+    line(entry,'Reference',t.referenceKey);line(entry,'Time',new Date(t.createdAt).toLocaleString());
+    result.appendChild(entry);
+   }
+  }catch(e){result.textContent='Unable to load wallet: '+e.message}finally{load.disabled=false}
+ });
+ c.append(load,result);
 }
 function plannedPage(){const p=pages.find(x=>x[1]===currentPage);const name=p?p[2]:'Feature';notice(name+' is not connected yet. This feature cannot change Akira until its protected backend API and database operations are implemented and tested.');const c=card('Implementation status');line(c,'Feature',name);line(c,'Current state','Read-only placeholder · Not live');line(c,'Required','Authenticated endpoint + authorization + server-side validation');line(c,'Rollout','Backup → tests → staging → production')}
 loginPage();

@@ -16,7 +16,7 @@ DEPLOY_STARTED=0
 DONE=0
 # IMPORTANT: never replace live web/src/app.js, web/admin.html,
 # server/src/control.mjs, server/src/admin.html, APKs or credentials.
-FILES=(server/src/server.mjs server/src/seller-wallet.mjs server/src/seller-admin.mjs
+FILES=(server/package.json server/src/server.mjs server/src/seller-wallet.mjs server/src/seller-admin.mjs
   server/src/room-seats.mjs server/src/rooms.mjs server/src/account-deletion.mjs
   server/src/daily-rewards.mjs server/src/google-auth.mjs
   server/migrations/011_room_seats.sql server/migrations/012_deletion_requests.sql

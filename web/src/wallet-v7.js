@@ -15,7 +15,18 @@
   }
   function short(v) {
     if (typeof window.akiraCompactCoins === 'function') return window.akiraCompactCoins(v);
-    return exact(v);
+    var raw = String(v ?? '0');
+    if (!/^\d+$/.test(raw)) return '—';
+    var amount = BigInt(raw);
+    var units = [[1000000000000n, 'T'], [1000000000n, 'B'], [1000000n, 'M'], [1000n, 'K']];
+    for (var i = 0; i < units.length; i++) {
+      var base = units[i][0];
+      if (amount >= base) {
+        var tenth = amount * 10n / base;
+        return String(tenth / 10n) + (tenth % 10n ? '.' + String(tenth % 10n) : '') + units[i][1];
+      }
+    }
+    return raw;
   }
   function ensure() {
     if (root) return;
@@ -174,8 +185,11 @@
       if (window.toast) window.toast('Seller ID: ' + (btn.dataset.id || ''));
     }
   }
-  window.rechargeSheet = load;
-  window.openAkiraWallet = load;
-  window.openAkiraWalletV7 = load;
-  ['qr', 'hc'].forEach(function (id) { var b = document.getElementById(id); if (b) b.onclick = load; });
+  window.rechargeSheet = function (tab) { currentTab = tab === 1 ? 'exchange' : 'recharge'; return load(); };
+  window.openAkiraWallet = function () { currentTab = 'exchange'; return load(); };
+  window.openAkiraWalletV7 = window.openAkiraWallet;
+  ['qr', 'hc'].forEach(function (id) {
+    var b = document.getElementById(id);
+    if (b) b.onclick = function () { currentTab = id === 'qr' ? 'recharge' : 'exchange'; load(); };
+  });
 })();

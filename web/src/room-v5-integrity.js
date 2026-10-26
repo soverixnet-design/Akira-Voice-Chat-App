@@ -59,6 +59,7 @@
       if(!item){notify('This gift is not enabled in Admin catalog');return}
       var price=Number(item.price);
       if(!Number.isSafeInteger(price)||price<=0)throw Error('Invalid gift price');
+      if(price!==Number(selected[1])){notify('Gift price updated by Admin. Reopen gift box to review price');return}
       var balance=await syncWallet();
       if(price*count*recipients.length>balance){notify('Not enough coins in real wallet');return}
       for(var i=0;i<recipients.length;i++){
@@ -67,9 +68,11 @@
           itemId:String(item.id),recipientId:String(person.id),quantity:count,requestId:key()
         });
         if(answer.duplicate)throw Error('Duplicate gift request, check wallet history');
-        if(!Number.isSafeInteger(Number(answer.total))||Number(answer.total)!==price*count)throw Error('Gift total does not match server catalog');
-        completed++;spent+=Number(answer.total);
+        var billed=Number(answer.total);
+        if(!Number.isSafeInteger(billed)||billed<=0)throw Error('Invalid server gift receipt');
+        completed++;spent+=billed;
         if(answer.balance!==undefined)updateWallet(answer.balance);
+        if(billed!==price*count)throw Error('Server price changed; stopped remaining gifts');
         for(var k=0;k<count;k++){
           try{window.fly(selected[0],indices[i],i*150+k*90,price)}catch(_){}
         }

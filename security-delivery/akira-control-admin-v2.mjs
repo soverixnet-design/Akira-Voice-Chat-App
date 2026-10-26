@@ -447,7 +447,7 @@ export async function controlRoutes(req,url,send){
    if(section==='reports')({rows}=await db.query('SELECT r.id,u.public_id::text AS reporter_id,r.target_id,r.message,r.status,r.created_at FROM akira_control_reports r JOIN akira_users u ON u.id=r.user_id ORDER BY r.id DESC LIMIT 51 OFFSET $1',[offset]));
    if(section==='deletion-requests')({rows}=await db.query(
      'SELECT u.public_id::text AS "publicId",u.display_name AS "displayName",d.reason,d.status,d.requested_at AS "requestedAt" FROM akira_account_deletion_requests d JOIN akira_users u ON u.id=d.user_id ORDER BY d.requested_at DESC LIMIT 51 OFFSET $1',[offset]
-   )});
+   ));
    if(section==='settings')({rows}=await db.query('SELECT id,coins_per_100 FROM akira_control_exchange'));
    if(section==='games')({rows}=await db.query('SELECT game,enabled FROM akira_control_games ORDER BY game'));
    if(section==='rewards')({rows}=await db.query('SELECT id,name,starts_at,ends_at,amount::text,winners,status FROM akira_control_rewards ORDER BY id DESC LIMIT 51 OFFSET $1',[offset]));

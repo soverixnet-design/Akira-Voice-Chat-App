@@ -1,3 +1,4 @@
+import {adminWalletHistory} from './admin-wallet-history.mjs';
 import { getWallet, walletHistory, applyWalletDelta } from './wallet.mjs';
 import { sellerBalance, sellerCredit, sellerSend } from './seller-wallet.mjs';
 import { setSellerStatus } from './seller-admin.mjs';
@@ -473,6 +474,14 @@ export const requestHandler = async (req, res) => {
       console.error('admin_recharge_failed',err.message);
       return send(503,{error:'admin_recharge_unavailable'});
     }
+  }
+
+  // Financial history is available only to the owner-level administrator.
+  if (req.method === 'GET' && url.pathname === '/api/v1/admin/wallet/history') {
+    try {
+      const result=await adminWalletHistory(req.headers.authorization,url.searchParams.get('id'));
+      return send(result.status,result.body);
+    }catch(err){console.error('admin_wallet_history_failed',err.message);return send(503,{error:'wallet_history_unavailable'});}
   }
 
   if (req.method === 'GET' && url.pathname === '/api/v1/admin/users/search') {

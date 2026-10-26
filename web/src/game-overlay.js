@@ -34,6 +34,7 @@
       frame.contentWindow.postMessage({type:'akira:game-auth',token:akiraToken(),apiBase:window.AKIRA_API_BASE},location.origin);
       return;
     }
+    if(e.source===frame.contentWindow && e.data?.type==='exit'){close();return;}
     if(e.source===frame.contentWindow && e.data?.type==='akira:wallet-updated'){
       window.dispatchEvent(new Event('akira:wallet-updated'));
       return;

@@ -46,3 +46,9 @@ test('Play target SDK is 36 but signed release is a separate step',()=>{
  assert.match(android,/targetSdkVersion = 36/);
  assert.match(read('android/app/build.gradle'),/versionCode 1/);
 });
+
+test('existing live Admin handlers are preserved when modules are present',()=>{
+ assert.match(api,/loadOptionalLegacyModule/);
+ assert.match(api,/legacyControlRoutes/);
+ assert.match(api,/legacyServeAdmin/);
+});

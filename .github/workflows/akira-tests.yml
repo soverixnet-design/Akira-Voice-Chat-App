@@ -32,7 +32,9 @@ jobs:
           node --check web/src/seller-directory.js
           node --check scripts/smoke-prod.mjs
       - name: Check staging and deployment shell syntax
-        run: bash -n scripts/deploy-akira-seller-safe.sh
+        run: |
+          bash -n scripts/deploy-akira-seller-safe.sh
+          bash -n scripts/install-admin-finance.sh
       - name: Check embedded Python syntax in deployment
         run: |
           python3 - <<'PY'

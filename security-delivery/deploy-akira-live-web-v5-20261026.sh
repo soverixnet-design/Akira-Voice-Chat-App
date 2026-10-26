@@ -10,6 +10,7 @@ mkdir -p "$BACKUP_BASE"
 BACKUP=$(mktemp -d "$BACKUP_BASE/20261026-web-v5.XXXXXX")
 TMP=$(mktemp -d "$BACKUP_BASE/.web-v5-stage.XXXXXX")
 COMPLETED=0
+CHANGED=0
 cd "$APP"
 echo "Backup directory: $BACKUP"
 need_blob(){
@@ -25,7 +26,8 @@ need_blob(){
  fi
 }
 download(){
- local relative="$1" expected="$2" dest="$TMP/$relative"
+ local relative="$1" expected="$2" dest
+ dest="$TMP/$relative"
  mkdir -p "$(dirname "$dest")"
  curl -fLsS --connect-timeout 12 --max-time 60 "$REPO/$REF/$relative" -o "$dest"
  need_blob "$dest" "$expected"
@@ -33,6 +35,9 @@ download(){
 rollback(){
  local result=$?
  if [[ "$COMPLETED" != 1 ]]; then
+  if [[ "$CHANGED" != 1 ]]; then
+   echo "Preflight stopped: no live application files were modified." >&2
+  else
    echo "Deployment failed. Restoring previous live files from: $BACKUP" >&2
    for file in web/index.html web/room.html web/src/room-live.js; do
       if [[ -f "$BACKUP/$file" ]]; then cp -a "$BACKUP/$file" "$APP/$file"; fi
@@ -51,6 +56,7 @@ rollback(){
       cp -a "$BACKUP/native-public" "$APP/android/app/src/main/assets/public"
    fi
    echo "Restored original HTML, room gift guard, build assets and APK." >&2
+  fi
  fi
  exit "$result"
 }
@@ -90,6 +96,7 @@ if [[ -d dist ]]; then cp -a dist "$BACKUP/dist"; fi
 if [[ -d android/app/src/main/assets/public ]]; then
  cp -a android/app/src/main/assets/public "$BACKUP/native-public"
 fi
+CHANGED=1
 install -m 0644 "$TMP/web/src/admin-v4-app.js" web/src/admin-v4-app.js
 install -m 0644 "$TMP/web/src/room-v5-integrity.js" web/src/room-v5-integrity.js
 install -m 0644 "$TMP/web/src/room-live.js" web/src/room-live.js

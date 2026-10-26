@@ -18,6 +18,12 @@ test('production deploy manifest exists and includes every new server dependency
   assert.ok(manifest.includes(filename),filename+' present in rollout manifest');
  }
 });
+test('npm dependencies used by new live API are in deployed package manifest',()=>{
+ const pkg=JSON.parse(read('server/package.json'));
+ assert.ok(manifest.includes('server/package.json'),'deploy updated package.json before API image build');
+ assert.ok(pkg.dependencies['google-auth-library'],'Google OIDC dependency is installed by Dockerfile');
+ assert.match(read('server/Dockerfile'),/COPY package\.json/);
+});
 test('every additive schema migration required by current APIs is applied by rollout',()=>{
  for(const number of ['011_room_seats','012_deletion_requests','013_user_safety','014_daily_rewards']){
   const filename='server/migrations/'+number+'.sql';

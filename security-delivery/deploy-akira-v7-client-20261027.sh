@@ -74,7 +74,14 @@ edit('android/app/build.gradle',s=>{
 });
 edit('android/app/src/main/java/com/akira/voice/MainActivity.java',s=>{
  if(s.includes('registerPlugin(AkiraGoogleLoginPlugin.class);'))return s;
- return once(s,'registerPlugin(AkiraRoomStatePlugin.class);','registerPlugin(AkiraRoomStatePlugin.class);\n        registerPlugin(AkiraGoogleLoginPlugin.class);','MainActivity plugin');
+ const classOpen=/public\s+class\s+MainActivity\s+extends\s+BridgeActivity\s*\{/;
+ if(!classOpen.test(s))throw Error('MainActivity does not extend BridgeActivity; review before altering');
+ if(/\bonCreate\s*\(/.test(s)){
+   const supers=[...s.matchAll(/super\.onCreate\([^;]*\);/g)];
+   if(supers.length!==1)throw Error('MainActivity onCreate override must call super exactly once');
+   return s.replace(supers[0][0],'registerPlugin(AkiraGoogleLoginPlugin.class);\n        '+supers[0][0]);
+ }
+ return s.replace(classOpen,m=>m+'\n    @Override\n    public void onCreate(android.os.Bundle savedInstanceState) {\n        registerPlugin(AkiraGoogleLoginPlugin.class);\n        super.onCreate(savedInstanceState);\n    }');
 });
 NODE
 for f in web/src/game-overlay.js web/src/game-overlay-v6.js web/src/wallet-v7.js web/src/google-login-v7.js web/food-wheel/game.js; do

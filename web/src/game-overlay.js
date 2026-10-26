@@ -23,7 +23,7 @@
     const inRoom=!!document.getElementById('rw')?.classList.contains('on');
     root.classList.toggle('inRoom',inRoom);
     root.querySelector('.gameTitle').textContent=game==='food-wheel'?'🎡 Food Wheel':'🎰 Jackpot Fruit';
-    frame.src='game-live.html?game='+encodeURIComponent(game);
+    frame.src=game==='food-wheel'?'food-wheel/index.html':'jackpot-fruit/index.html';
     root.classList.add('open');
   }
   root.querySelector('.gameClose').addEventListener('click',close);
@@ -31,7 +31,7 @@
   window.addEventListener('message',e=>{
     if(e.origin!==location.origin)return;
     if(e.source===frame.contentWindow && e.data?.type==='akira:game-ready'){
-      frame.contentWindow.postMessage({type:'akira:game-auth',token:akiraToken()},location.origin);
+      frame.contentWindow.postMessage({type:'akira:game-auth',token:akiraToken(),apiBase:window.AKIRA_API_BASE},location.origin);
       return;
     }
     if(e.source===frame.contentWindow && e.data?.type==='akira:wallet-updated'){

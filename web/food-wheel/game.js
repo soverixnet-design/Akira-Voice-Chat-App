@@ -13,8 +13,8 @@
     bettingSeconds: 30,
     spinSeconds: 6,
     resultSeconds: 5,
-    chips: [10, 100, 1000, 5000, 10000],
-    maxBetPerRound: 1000000,
+    chips: [1000, 10000, 100000, 1000000, 10000000],
+    maxBetPerRound: Number.MAX_SAFE_INTEGER,
     startBalance: 50000,          // demo mode only
     simulateOtherPlayers: true,   // demo mode only
     // Order matters: first 4 = right side (meat ×10 ×15 ×25 ×45, top→bottom), last 4 = left side (veg ×5).
@@ -96,10 +96,22 @@
   const outIdx = (id) => OUT.findIndex((o) => o.id === id);
   const payoutOf = (o, bets) => OUT[o].wins.reduce((a, w) => a + bets[w] * CONFIG.items[w].mult, 0);
 
+  let initBal = CONFIG.startBalance;
+  let initUser = { id: qs.get('uid') || 'guest', name: qs.get('name') || 'Player', avatar: qs.get('avatar') || '' };
+  try {
+    const appUser = JSON.parse(localStorage.getItem('vr_app_v1') || 'null');
+    if (appUser && appUser.id) {
+      initUser = { id: String(appUser.id), name: appUser.name || 'Player', avatar: appUser.pic || '' };
+    }
+    const appState = JSON.parse(localStorage.getItem('vr_state_v2') || 'null');
+    if (appState && Number.isFinite(Number(appState.coins))) {
+      initBal = Math.max(0, Math.floor(Number(appState.coins)));
+    }
+  } catch (_) {}
   const S = {
-    lang: 'en',
-    user: { id: qs.get('uid') || 'guest', name: qs.get('name') || 'Player', avatar: qs.get('avatar') || '' },
-    balance: qs.has('balance') ? Math.max(0, parseInt(qs.get('balance'), 10) || 0) : CONFIG.startBalance,
+    lang: qs.get('lang') === 'en' ? 'en' : 'bn',
+    user: initUser,
+    balance: qs.has('balance') ? Math.max(0, parseInt(qs.get('balance'), 10) || 0) : initBal,
     round: parseInt(qs.get('round'), 10) || 580,
     phase: 'betting', endsAt: 0, timeLeft: CONFIG.bettingSeconds,
     chipIdx: 1,
@@ -258,6 +270,18 @@
     $('userName').textContent = S.user.name;
     $('userAvatar').src = S.user.avatar || avatarData(S.user.name);
   }
+  function syncSharedLocalWallet(bal) {
+    try {
+      const st = JSON.parse(localStorage.getItem('vr_state_v2') || '{}');
+      st.coins = Math.max(0, Math.floor(Number(bal) || 0));
+      localStorage.setItem('vr_state_v2', JSON.stringify(st));
+    } catch (_) {}
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'akira:wallet-updated', balance: S.balance }, '*');
+      }
+    } catch (_) {}
+  }
   function renderBalance() {
     $('balance').textContent = fmt(S.balance);
     refreshDailyWin();
@@ -365,6 +389,7 @@
     S.myBets[i] += amount;
     S.allBets[i] += amount;
     bump(el);
+    syncSharedLocalWallet(S.balance);
     renderBets(); renderBalance();
     emit('bet', { round: S.round, itemId: it.id, itemIndex: i, amount, totalOnItem: S.myBets[i], balance: S.balance });
     return true;
@@ -562,7 +587,12 @@
     S.phase = 'result';
     const myTotal = sumMy();
     const winAmt = payoutOf(result, S.myBets);
-    S.balance += winAmt; S.lastWin = winAmt; recordDailyWin(winAmt);
+    if (!window.__akiraServerSettled) {
+      S.balance += winAmt;
+    }
+    window.__akiraServerSettled = false;
+    S.lastWin = winAmt; recordDailyWin(winAmt);
+    syncSharedLocalWallet(S.balance);
     if (myTotal > 0) { S.lastBets = S.myBets.slice(); S.records.unshift({ round: S.round, idx: result, bet: myTotal, win: winAmt }); }
     S.history.unshift({ round: S.round, idx: result });
     if (S.history.length > 100) S.history.length = 100;
@@ -821,9 +851,138 @@
   });
   window.addEventListener('resize', fitWheel);
 
+  /* ---------------- AKIRA WALLET & SERVER ADAPTER ---------------- */
+  let akiraToken = '';
+  let akiraApiBase = (/soverixnet\.online$/i.test(location.hostname) ? 'https://api.soverixnet.online' : location.origin);
+  try {
+    akiraToken = sessionStorage.getItem('akira_server_token_v1') || localStorage.getItem('akira_server_token_v1') || '';
+  } catch (_) {}
+
+  async function akiraApi(path, method = 'GET', body) {
+    const r = await fetch(akiraApiBase.replace(/\/$/, '').replace(/\/api\/v1$/, '') + '/api/v1' + path, {
+      method,
+      headers: {
+        Authorization: 'Bearer ' + akiraToken,
+        ...(body ? { 'Content-Type': 'application/json' } : {})
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      cache: 'no-store'
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
+    return d;
+  }
+
+  let akiraLiveActive = false;
+  async function syncAkiraServerState() {
+    if (!akiraToken) return;
+    try {
+      const [ov, rd] = await Promise.all([
+        akiraApi('/games/overview'),
+        akiraApi('/games/food-wheel/round').catch(() => null)
+      ]);
+      if (ov && ov.wallet && Number.isFinite(Number(ov.wallet.balance))) {
+        S.balance = Math.max(0, Number(ov.wallet.balance));
+        if (Number.isFinite(Number(ov.todayWinnings24h))) {
+          winWindow.total = Math.max(0, Number(ov.todayWinnings24h));
+          S.todayRev = winWindow.total;
+        }
+        syncSharedLocalWallet(S.balance);
+        renderBalance();
+      }
+      const srvNow = rd && rd.serverTime ? Date.parse(rd.serverTime) : Date.now();
+      const rem = rd && rd.round ? Math.ceil((Date.parse(rd.round.endsAt) - (Number.isFinite(srvNow) ? srvNow : Date.now())) / 1000) : 0;
+      if (rd && rd.bettingEnabled && rd.round && !rd.round.settledAt && rem > 0) {
+        akiraLiveActive = true;
+        const rId = Number(rd.round.id);
+        if (Number.isFinite(rId) && rId > 0) S.round = rId;
+        if (S.phase === 'betting') {
+          S.timeLeft = rem;
+          renderHub();
+        }
+      } else {
+        akiraLiveActive = false;
+      }
+    } catch (_) {}
+  }
+
+  CONFIG.betValidator = async ({ itemId, amount }) => {
+    if (!akiraToken || !akiraLiveActive) { toast('Live game server unavailable'); return false; }
+    try {
+      const rd = await akiraApi('/games/food-wheel/round');
+      const srvNow = rd && rd.serverTime ? Date.parse(rd.serverTime) : Date.now();
+      const rem = rd && rd.round ? Math.ceil((Date.parse(rd.round.endsAt) - (Number.isFinite(srvNow) ? srvNow : Date.now())) / 1000) : 0;
+      if (!rd.bettingEnabled || !rd.round || rd.round.settledAt || rem <= 0) {
+        akiraLiveActive = false;
+        toast('Betting is closed on the server');
+        return false;
+      }
+      S.round = Number(rd.round.id) || S.round;
+      const d = await akiraApi('/games/food-wheel/bets', 'POST', {
+        roundId: S.round,
+        itemId,
+        amount,
+        requestId: crypto.randomUUID()
+      });
+      if (Number.isFinite(Number(d.balance))) {
+        S.balance = Number(d.balance) + amount; // placeBet subtracts amount right after validator returns true
+      }
+      return true;
+    } catch (err) {
+      toast(err.message === 'insufficient_balance' ? t('noCoins') : (err.message === 'betting_closed' ? t('betClosed') : t('walletErr')));
+      return false;
+    }
+  };
+
+  CONFIG.resultProvider = async () => {
+    if (!akiraToken || !akiraLiveActive) return -1;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      try {
+        const rd = await akiraApi('/games/food-wheel/round');
+        const settled = (rd.round && rd.round.result && Number(rd.round.id) === Number(S.round))
+          ? rd.round
+          : (rd.previousRound && rd.previousRound.result ? rd.previousRound : (rd.round && rd.round.result ? rd.round : null));
+        if (settled && settled.result) {
+          const ov = await akiraApi('/games/overview').catch(() => null);
+          if (ov && ov.wallet && Number.isFinite(Number(ov.wallet.balance))) {
+            S.balance = Number(ov.wallet.balance);
+            window.__akiraServerSettled = true;
+            if (Number.isFinite(Number(ov.todayWinnings24h))) {
+              winWindow.total = Math.max(0, Number(ov.todayWinnings24h));
+              S.todayRev = winWindow.total;
+            }
+          }
+          if (rd.round && !rd.round.settledAt && Number(rd.round.id) > 0) {
+            S.round = Number(rd.round.id) - 1;
+          }
+          return outIdx(settled.result);
+        }
+      } catch (_) {}
+      await new Promise(r => setTimeout(r, 650));
+    }
+    return -1;
+  };
+
+  window.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || typeof d !== 'object') return;
+    if (d.type === 'akira:game-auth') {
+      if (d.token) akiraToken = String(d.token);
+      if (d.apiBase) akiraApiBase = String(d.apiBase);
+      if (typeof d.balance === 'number' && !akiraToken) {
+        S.balance = Math.max(0, d.balance);
+        renderBalance();
+      }
+      syncAkiraServerState();
+    }
+  });
+
   /* ---------------- BOOT ---------------- */
   buildWheel(); buildChips(); applyLang(); renderUser(); renderSound(); renderBalance();
   fitWheel();
+  try { window.parent?.postMessage({ type: 'akira:game-ready' }, '*'); } catch (_) {}
+  syncAkiraServerState();
+  setInterval(() => { if (akiraToken && S.phase === 'betting') syncAkiraServerState(); }, 5000);
   setInterval(() => { const previous = S.todayRev; refreshDailyWin(); if (previous !== S.todayRev) renderBalance(); }, 60000);
   server = qs.get('server') || '';
   token = qs.get('token') || '';

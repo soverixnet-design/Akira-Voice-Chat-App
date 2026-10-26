@@ -13,6 +13,7 @@ export function serveAdmin(req,res,url){
   let file;
   if(['/admin-v2','/admin-v2/'].includes(url.pathname))file='./admin-v2.html';
   else if(['/admin','/admin/'].includes(url.pathname))file='./admin.html';
+  else if(['/admin-legacy','/admin-legacy/'].includes(url.pathname))file='./admin-legacy.html';
   else return false;
   res.writeHead(200,securityHeaders);
   res.end(readFileSync(new URL(file,import.meta.url)));

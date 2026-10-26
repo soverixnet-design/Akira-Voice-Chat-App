@@ -44,7 +44,9 @@ test('safe staging checks container health and avoids destructive Git commands',
 });
 test('Play target SDK is 36 but signed release is a separate step',()=>{
  assert.match(android,/targetSdkVersion = 36/);
- assert.match(read('android/app/build.gradle'),/versionCode 1/);
+ assert.match(read('android/app/build.gradle'),/versionCode 2/);
+ assert.match(read('android/app/build.gradle'),/versionName "2.1.0"/);
+ assert.match(read('web/admin.html'),/Akira Admin Control Center/);
 });
 
 test('existing live Admin handlers are preserved when modules are present',()=>{

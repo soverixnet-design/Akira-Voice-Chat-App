@@ -45,6 +45,22 @@ for path in /api/v1/admin/wallet/recharge /api/v1/admin/sellers/allocate /api/v1
     exit 1
   fi
 done
+echo '=== VERIFY EXISTING FINANCE DATABASE TABLES (READ ONLY) ==='
+if ! docker container inspect akira-postgres >/dev/null 2>&1; then
+  echo 'STOP: Existing akira-postgres database container not found. No changes made.' >&2
+  exit 1
+fi
+SCHEMA_READY="$(docker exec akira-postgres psql -U akira -d akira_db -Atc \
+  "SELECT to_regclass('public.akira_wallets') IS NOT NULL AND
+   to_regclass('public.akira_seller_wallets') IS NOT NULL AND
+   to_regclass('public.akira_seller_allocations') IS NOT NULL AND
+   to_regclass('public.akira_seller_transfers') IS NOT NULL AND
+   EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='akira_seller_wallets' AND column_name='enabled');")"
+if [[ "$SCHEMA_READY" != 't' ]]; then
+  echo 'STOP: Seller wallet schema needs repair/migration first. No data changed.' >&2
+  exit 1
+fi
+echo 'Verified original wallet and seller balances tables.'
 echo '=== COPY REVIEWED GITHUB FINANCE PAGE ==='
 git -C "$ROOT" fetch origin "$BRANCH"
 git -C "$ROOT" show FETCH_HEAD:web/admin-finance.html > "$TMP"

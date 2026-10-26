@@ -136,6 +136,27 @@ if [[ "$MODE" == "--check" ]]; then
   exit 0
 fi
 
+echo '=== PREFLIGHT: ENSURE EXISTING LIVE VOICE AND GAME ENVIRONMENT IS PRESERVED ==='
+python3 - "$ROOT/server/compose.yaml" "$ROOT/server" <<'PY'
+import json,subprocess,sys
+compose,directory=sys.argv[1:]
+base=['docker','compose','-f',compose,'--project-directory',directory]
+cid=subprocess.check_output(base+['ps','-q','akira-api'],text=True).strip()
+if not cid:
+    raise SystemExit('Live API container not found; cannot safely deploy')
+info=json.loads(subprocess.check_output(['docker','inspect',cid],text=True))[0]
+active=dict(x.split('=',1) for x in info['Config']['Env'] if '=' in x)
+desired=json.loads(subprocess.check_output(base+['config','--format','json'],text=True))
+env=desired['services']['akira-api'].get('environment') or {}
+keys=('AKIRA_LIVEKIT_API_KEY','AKIRA_LIVEKIT_API_SECRET','AKIRA_LIVEKIT_URL',
+      'AKIRA_GAME_ENGINE_ENABLED','AKIRA_GOOGLE_WEB_CLIENT_ID')
+fail=[key for key in keys if active.get(key) and str(env.get(key) or '')!=active[key]]
+if fail:
+    print('STOP: Existing live settings would change after Compose restart:',', '.join(fail))
+    print('Restore these values securely through your existing Compose environment before applying.')
+    raise SystemExit(1)
+print('PASS: Current live voice/game/login settings match the Compose restart configuration.')
+PY
 echo '=== BACKUP LIVE SOURCE AND DB BEFORE UPDATE ==='
 BACKUP="$ROOT/backups/akira-seller-release-$STAMP"
 mkdir -p "$BACKUP/files" "$BACKUP/database"

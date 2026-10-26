@@ -78,6 +78,9 @@
   finally{updating=false}
  }
  async function actSeat(body){
+  if(body.leave!==true && typeof window.akiraEnsureMicPermission==='function'){
+   if(!await window.akiraEnsureMicPermission())return;
+  }
   try{
    const state=await request('POST','seat',body);
    myMute=body.leave===true;
@@ -108,6 +111,9 @@
  };
  mic.onclick=async()=>{
   if(localSeat===null){notify('Tap an empty seat to talk');return}
+  if(myMute && typeof window.akiraEnsureMicPermission==='function'){
+   if(!await window.akiraEnsureMicPermission())return;
+  }
   myMute=!myMute;
   mic.textContent=myMute?'🔇':'🎤';
   mic.classList.toggle('off',myMute);

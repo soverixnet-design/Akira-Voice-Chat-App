@@ -5,6 +5,22 @@
  var api=function(path,method,data){return window.akiraRequest(path,method||'GET',data,token()||undefined)};
  var safe=function(s){return String(s??'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
  var fmt=function(n){return Number(n||0).toLocaleString('en-US')};
+ // Display-only abbreviations. BigInt keeps large wallet values exact.
+ var compact=function(value){
+   var s=String(value??'0');
+   if(!/^\d+$/.test(s))return '—';
+   var n=BigInt(s);
+   var groups=[['Q',1000000000000000000n],['P',1000000000000000n],['T',1000000000000n],['B',1000000000n],['M',1000000n],['K',1000n]];
+   for(var i=0;i<groups.length;i++){
+     var unit=groups[i][1];if(n<unit)continue;
+     var whole=n/unit, decimal=(n%unit)*100n/unit;
+     var frac=decimal?'.'+String(decimal).padStart(2,'0').replace(/0+$/,''):'';
+     return whole.toString()+frac+groups[i][0];
+   }
+   return n.toString();
+ };
+ var full=function(value){return String(value??'0').replace(/\B(?=(\d{3})+(?!\d))/g,',')};
+ window.akiraCompactCoins=compact;
  var el=function(id){return document.getElementById(id)};
  var busy=false;
  function reqKey(){return 'wallet-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,14)}
@@ -14,12 +30,12 @@
    window.openSheet('<h3>🪙 My Wallet</h3><div class="lbl">Loading real wallet…</div>');
    try{
      var out=await Promise.all([api('/api/v1/wallet'),api('/api/v1/community/balance'),api('/api/v1/wallet/history').catch(function(){return {transactions:[]}})]);
-     var coins=Number(out[0].wallet?.balance),diamonds=Number(out[1].diamonds||0);
-     if(!Number.isSafeInteger(coins)||coins<0||!Number.isSafeInteger(diamonds)||diamonds<0)throw Error('Wallet data invalid');
+     var rawCoins=String(out[0].wallet?.balance??''),rawDiamonds=String(out[1].diamonds??'0');
+     if(!/^\d+$/.test(rawCoins)||!/^\d+$/.test(rawDiamonds))throw Error('Wallet data invalid');
      var list=Array.isArray(out[2].transactions)?out[2].transactions.slice(0,12):[];
      var html='<h3>🪙 My Wallet</h3>'+
        '<div class="rwc" style="margin:12px 0;text-align:center"><div class="rwt">My Coin Balance</div>'+
-       '<div class="rwb">🪙 '+fmt(coins)+'</div><div>💎 '+fmt(diamonds)+' Diamonds</div></div>'+
+       '<div class="rwb">🪙 '+compact(rawCoins)+'</div><small style="display:block;word-break:break-word;opacity:.8">Exact: '+full(rawCoins)+' coins</small><div>💎 '+compact(rawDiamonds)+' Diamonds</div></div>'+
        '<div class="row" id="av6WalletSeller"><b>🏪 Verified Coin Sellers</b><span>›</span></div>'+
        '<div class="row" id="av6WalletExchange"><b>🔄 Diamond to Coin Exchange</b><span>›</span></div>'+
        '<div class="row" id="av6WalletReload"><b>🔁 Refresh Balance</b><span>›</span></div>'+

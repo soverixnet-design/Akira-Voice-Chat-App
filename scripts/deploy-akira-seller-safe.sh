@@ -17,8 +17,10 @@ DONE=0
 # IMPORTANT: never replace live web/src/app.js, web/admin.html,
 # server/src/control.mjs, server/src/admin.html, APKs or credentials.
 FILES=(server/src/server.mjs server/src/seller-wallet.mjs server/src/seller-admin.mjs
-  server/src/room-seats.mjs server/src/rooms.mjs server/src/account-deletion.mjs server/migrations/011_room_seats.sql
-  server/migrations/012_deletion_requests.sql server/migrations/013_user_safety.sql
+  server/src/room-seats.mjs server/src/rooms.mjs server/src/account-deletion.mjs
+  server/src/daily-rewards.mjs server/src/google-auth.mjs
+  server/migrations/011_room_seats.sql server/migrations/012_deletion_requests.sql
+  server/migrations/013_user_safety.sql server/migrations/014_daily_rewards.sql
   server/src/game-bets.mjs web/src/seller-panel.js web/src/seller-directory.js
   web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/game-overlay.js
   web/src/room.js web/src/room-live.js
@@ -80,7 +82,8 @@ done
 echo '=== CANDIDATE TESTS ==='
 (cd "$REVIEW/server" && npm install --ignore-scripts --no-audit --no-fund && npm test)
 for f in server/src/server.mjs web/src/seller-panel.js web/src/seller-directory.js \
-  web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/room.js web/src/room-live.js server/src/room-seats.mjs server/src/account-deletion.mjs; do
+  web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/room.js web/src/room-live.js server/src/room-seats.mjs server/src/account-deletion.mjs \
+  server/src/daily-rewards.mjs server/src/google-auth.mjs; do
   node --check "$REVIEW/$f"
 done
 
@@ -132,6 +135,7 @@ echo '=== APPLY ADDITIVE ROOM SEAT MIGRATION (BACKUP ALREADY VERIFIED) ==='
 docker exec -i akira-postgres psql -U akira -d akira_db -v ON_ERROR_STOP=1 < "$REVIEW/server/migrations/011_room_seats.sql"
 docker exec -i akira-postgres psql -U akira -d akira_db -v ON_ERROR_STOP=1 < "$REVIEW/server/migrations/012_deletion_requests.sql"
 docker exec -i akira-postgres psql -U akira -d akira_db -v ON_ERROR_STOP=1 < "$REVIEW/server/migrations/013_user_safety.sql"
+docker exec -i akira-postgres psql -U akira -d akira_db -v ON_ERROR_STOP=1 < "$REVIEW/server/migrations/014_daily_rewards.sql"
 for f in "${FILES[@]}"; do
   mkdir -p "$ROOT/$(dirname "$f")"
   cp -a "$REVIEW/$f" "$ROOT/$f"
@@ -223,7 +227,7 @@ existing=json.loads(subprocess.check_output(['docker','inspect',cid],text=True))
 live=dict(item.split('=',1) for item in existing['Config']['Env'] if '=' in item)
 desired=json.loads(subprocess.check_output(prefix+['config','--format','json'],text=True))
 future=desired['services']['akira-api'].get('environment') or {}
-for key in ('AKIRA_LIVEKIT_API_KEY','AKIRA_LIVEKIT_API_SECRET','AKIRA_LIVEKIT_URL','AKIRA_GAME_ENGINE_ENABLED'):
+for key in ('AKIRA_LIVEKIT_API_KEY','AKIRA_LIVEKIT_API_SECRET','AKIRA_LIVEKIT_URL','AKIRA_GAME_ENGINE_ENABLED','AKIRA_GOOGLE_WEB_CLIENT_ID'):
     current=live.get(key,'')
     planned=str(future.get(key,'') or '')
     if current and planned!=current:

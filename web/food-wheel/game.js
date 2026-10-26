@@ -15,8 +15,8 @@
     resultSeconds: 5,
     chips: [1000, 10000, 100000, 1000000, 10000000],
     maxBetPerRound: Number.MAX_SAFE_INTEGER,
-    startBalance: 50000,          // demo mode only
-    simulateOtherPlayers: true,   // demo mode only
+    startBalance: 0,          // demo mode only
+    simulateOtherPlayers: false,   // demo mode only
     // Order matters: first 4 = right side (meat ×10 ×15 ×25 ×45, top→bottom), last 4 = left side (veg ×5).
     // weight = relative chance (out of 1000 together with specials). Demo mode only — online the server decides.
     items: [
@@ -96,7 +96,7 @@
   const outIdx = (id) => OUT.findIndex((o) => o.id === id);
   const payoutOf = (o, bets) => OUT[o].wins.reduce((a, w) => a + bets[w] * CONFIG.items[w].mult, 0);
 
-  let initBal = CONFIG.startBalance;
+  let initBal = 0;
   let initUser = { id: qs.get('uid') || 'guest', name: qs.get('name') || 'Player', avatar: qs.get('avatar') || '' };
   try {
     const appUser = JSON.parse(localStorage.getItem('vr_app_v1') || 'null');
@@ -105,14 +105,14 @@
     }
     const appState = JSON.parse(localStorage.getItem('vr_state_v2') || 'null');
     if (appState && Number.isFinite(Number(appState.coins))) {
-      initBal = Math.max(0, Math.floor(Number(appState.coins)));
+      // Offline or unverified local coin balances are never trusted.
     }
   } catch (_) {}
   const S = {
     lang: qs.get('lang') === 'en' ? 'en' : 'bn',
     user: initUser,
-    balance: qs.has('balance') ? Math.max(0, parseInt(qs.get('balance'), 10) || 0) : initBal,
-    round: parseInt(qs.get('round'), 10) || 580,
+    balance: 0, // Loaded only from the authenticated Akira wallet.
+    round: 0, // Loaded from the server.
     phase: 'betting', endsAt: 0, timeLeft: CONFIG.bettingSeconds,
     chipIdx: 1,
     myBets: new Array(N).fill(0), allBets: new Array(N).fill(0), lastBets: null,
@@ -130,7 +130,7 @@
     if (saved && Number.isFinite(saved.start) && Number.isFinite(saved.total) &&
         Date.now() >= saved.start && Date.now() - saved.start < 86400000) winWindow = saved;
   } catch (_) {}
-  S.todayRev = Math.max(0, winWindow.total);
+  S.todayRev = 0; // Unverified local daily wins are not shown.
   function recordDailyWin(amount) {
     if (Date.now() - winWindow.start >= 86400000 || Date.now() < winWindow.start) {
       winWindow = { start: Date.now(), total: 0 };

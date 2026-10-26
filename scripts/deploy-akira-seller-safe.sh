@@ -17,15 +17,15 @@ DONE=0
 # IMPORTANT: never replace live web/src/app.js, web/admin.html,
 # server/src/control.mjs, server/src/admin.html, APKs or credentials.
 FILES=(server/package.json server/src/server.mjs server/src/seller-wallet.mjs server/src/seller-admin.mjs
-  server/src/room-seats.mjs server/src/rooms.mjs server/src/account-deletion.mjs
+  server/src/room-seats.mjs server/src/rooms.mjs server/src/account-deletion.mjs server/src/admin-room-control.mjs
   server/src/daily-rewards.mjs server/src/google-auth.mjs
   server/migrations/011_room_seats.sql server/migrations/012_deletion_requests.sql
   server/migrations/013_user_safety.sql server/migrations/014_daily_rewards.sql
   server/src/game-bets.mjs web/src/seller-panel.js web/src/seller-directory.js
   web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/game-overlay.js
   web/src/room.js web/src/room-live.js
-  web/game-live.html web/admin-connected.html web/delete-account.html)
-SAVE=("${FILES[@]}" web/index.html web/room.html server/compose.yaml)
+  web/game-live.html web/admin-connected.html web/admin-legacy.html web/delete-account.html)
+SAVE=("${FILES[@]}" web/index.html web/room.html web/admin.html server/compose.yaml)
 
 restore_live() {
   echo "RESTORING previous API and UI from $BACKUP"
@@ -132,7 +132,7 @@ echo '=== CANDIDATE TESTS ==='
 (cd "$REVIEW/server" && npm install --ignore-scripts --no-audit --no-fund && npm test)
 for f in server/src/server.mjs web/src/seller-panel.js web/src/seller-directory.js \
   web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/room.js web/src/room-live.js server/src/room-seats.mjs server/src/account-deletion.mjs \
-  server/src/daily-rewards.mjs server/src/google-auth.mjs; do
+  server/src/daily-rewards.mjs server/src/google-auth.mjs server/src/admin-room-control.mjs; do
   node --check "$REVIEW/$f"
 done
 
@@ -240,6 +240,9 @@ for f in "${FILES[@]}"; do
   mkdir -p "$ROOT/$(dirname "$f")"
   cp -a "$REVIEW/$f" "$ROOT/$f"
 done
+# The user explicitly selected the NEW connected Admin v2 in place of the old page.
+# The original admin.html is backed up above; no global git reset/clean is used.
+cp -a "$REVIEW/web/admin.html" "$ROOT/web/admin.html"
 
 # Preserve the existing index page and its design; inject only missing scripts.
 python3 - "$ROOT/web/index.html" <<'PY'
@@ -354,9 +357,12 @@ echo '=== CHECK THE SAME ORIGINS THROUGH THE PUBLIC HTTPS PROXY ==='
 node "$REVIEW/scripts/smoke-prod.mjs"
 echo '=== VERIFY NEW WEB FILES ARE SERVED ==='
 WEB_ORIGIN="${AKIRA_WEB_ORIGIN:-https://api.soverixnet.online/app}"
-curl -fsS --max-time 15 "$WEB_ORIGIN/admin-connected.html" -o "$BACKUP/admin-served-check.html"
-grep -q 'Akira Connected Admin Preview' "$BACKUP/admin-served-check.html" ||
-  { echo 'Admin Panel not served from current website root'; exit 1; }
+curl -fsS --max-time 15 "$WEB_ORIGIN/admin.html" -o "$BACKUP/admin-served-check.html"
+grep -q 'Akira Admin Control Center' "$BACKUP/admin-served-check.html" ||
+  { echo 'NEW Admin v2 was not served at /admin.html — rollback'; exit 1; }
+curl -fsS --max-time 15 "$WEB_ORIGIN/admin-connected.html" -o "$BACKUP/admin-connected-served-check.html"
+grep -q 'Akira Admin Control Center' "$BACKUP/admin-connected-served-check.html" ||
+  { echo 'Connected Admin v2 is missing — rollback'; exit 1; }
 curl -fsS --max-time 15 "$WEB_ORIGIN/" -o "$BACKUP/index-served-check.html"
 grep -q 'seller-directory.js' "$BACKUP/index-served-check.html" ||
   { echo 'Updated seller directory script not in live website HTML'; exit 1; }

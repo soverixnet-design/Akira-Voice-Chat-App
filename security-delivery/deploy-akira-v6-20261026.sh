@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 umask 077
 APP=/opt/akira
-REF=746017b8846aabd60c4ea7c433463d24fc6a4a43
+REF=f3f1d7a61db5b826c03d7cd2686332604ef517b2
 BASE=https://raw.githubusercontent.com/soverixnet-design/Akira-Voice-Chat-App
 mkdir -p /opt/akira/security-backups
 BACKUP=$(mktemp -d /opt/akira/security-backups/20261026-v6.XXXXXX)
@@ -35,7 +35,7 @@ restore(){
   if [[ "$DONE" != 1 ]]; then
     if [[ "$ALTERED" == 1 ]]; then
       echo "V6 failed: restoring original live source and APK from $BACKUP" >&2
-      for f in web/index.html web/room.html web/src/room.js web/src/room-live.js web/food-wheel/game.js web/jackpot-fruit/index.html web/Akira-Voice-Chat.apk dist/Akira-Voice-Chat.apk; do
+      for f in web/index.html web/room.html web/src/app.js web/src/room.js web/src/room-live.js web/food-wheel/game.js web/jackpot-fruit/index.html web/Akira-Voice-Chat.apk dist/Akira-Voice-Chat.apk; do
         if [[ -f "$BACKUP/$f" ]]; then
           mkdir -p "$(dirname "$APP/$f")"
           cp -a "$BACKUP/$f" "$APP/$f"
@@ -72,10 +72,10 @@ sha_file web/src/room-live.js bf06bd2b4cc0cf92e7f8c5458ec84239f6fa1e54
 sha_file web/food-wheel/game.js e446d3aa78a636ccec2720d4c1317bfd2ea56308
 sha_file web/jackpot-fruit/index.html 6890f941c12e0dfaca567afa49879999cb7719a0
 grab web/src/game-overlay-v6.js 0d4ada56677af53ea55948f5909239032bd4e8b2
-grab web/src/wallet-v6.js d6393f7159b6ffd722f613caf5f6c438368de67f
+grab web/src/wallet-v6.js 18a85c0d85d34dfe07cadbf26086b3aa3ac6a629
 grab web/src/room-v6-permission.js ba1f040bc505815a65461553d94bd9a06fc04fab
 grab web/src/room-v6-giftbox.js 4531e0937f5febf56a95d4cd2cd071e13fa0b3de
-grab security-delivery/akira-v6-live-patch.cjs ed2ff371d18f06b13b450d855ab55361cf082b12
+grab security-delivery/akira-v6-live-patch.cjs cc1ea8c016a447a0386086bade7f5f424b913d35
 mkdir -p "$STAGE/web/vendor"
 curl -fLsS --connect-timeout 12 --max-time 120 https://cdn.jsdelivr.net/npm/livekit-client@2.15.1/dist/livekit-client.umd.min.js -o "$STAGE/web/vendor/livekit-client.umd.min.js"
 echo "3f6c725e299407e5d24c55735f66d77713777719171f15ed792ad37650a04644  $STAGE/web/vendor/livekit-client.umd.min.js" | sha256sum -c -
@@ -84,7 +84,7 @@ for f in web/src/game-overlay-v6.js web/src/wallet-v6.js web/src/room-v6-permiss
 done
 AKIRA_V6_VALIDATE=1 node "$STAGE/security-delivery/akira-v6-live-patch.cjs"
 curl -fsS --max-time 15 http://127.0.0.1:4301/health | grep -q '"ok":true'
-for f in web/index.html web/room.html web/src/room.js web/src/room-live.js web/food-wheel/game.js web/jackpot-fruit/index.html web/Akira-Voice-Chat.apk dist/Akira-Voice-Chat.apk web/src/game-overlay-v6.js web/src/wallet-v6.js web/src/room-v6-permission.js web/src/room-v6-giftbox.js web/vendor/livekit-client.umd.min.js; do
+for f in web/index.html web/room.html web/src/app.js web/src/room.js web/src/room-live.js web/food-wheel/game.js web/jackpot-fruit/index.html web/Akira-Voice-Chat.apk dist/Akira-Voice-Chat.apk web/src/game-overlay-v6.js web/src/wallet-v6.js web/src/room-v6-permission.js web/src/room-v6-giftbox.js web/vendor/livekit-client.umd.min.js; do
   if [[ -f "$f" ]]; then
     mkdir -p "$BACKUP/$(dirname "$f")"
     cp -a "$f" "$BACKUP/$f"
@@ -110,7 +110,11 @@ npx cap copy android
 APK=android/app/build/outputs/apk/debug/app-debug.apk
 test -s "$APK"
 for f in assets/public/src/wallet-v6.js assets/public/src/game-overlay-v6.js assets/public/src/room-v6-giftbox.js assets/public/src/room-v6-permission.js assets/public/vendor/livekit-client.umd.min.js; do
-  unzip -Z1 "$APK" | grep -Fxq "$f"
+  if ! unzip -Z1 "$APK" | grep -Fx "$f" >/dev/null; then
+    echo "APK is missing expected asset: $f" >&2
+    exit 1
+  fi
+  echo "Verified APK asset: $f"
 done
 install -m 0644 "$APK" web/Akira-Voice-Chat.apk
 install -m 0644 "$APK" dist/Akira-Voice-Chat.apk

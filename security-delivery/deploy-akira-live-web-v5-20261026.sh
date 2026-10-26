@@ -111,8 +111,8 @@ npx cap copy android
 (cd android && ./gradlew :app:assembleDebug --no-daemon --max-workers=2)
 APK=android/app/build/outputs/apk/debug/app-debug.apk
 test -s "$APK"
-unzip -Z1 "$APK" | grep -Fxq assets/public/src/admin-v4-app.js
-unzip -Z1 "$APK" | grep -Fxq assets/public/src/room-v5-integrity.js
+unzip -Z1 "$APK" | grep -Fx assets/public/src/admin-v4-app.js
+unzip -Z1 "$APK" | grep -Fx assets/public/src/room-v5-integrity.js
 install -m 0644 "$APK" web/Akira-Voice-Chat.apk
 install -m 0644 "$APK" dist/Akira-Voice-Chat.apk
 COMPLETED=1

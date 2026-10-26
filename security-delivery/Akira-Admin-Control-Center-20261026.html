@@ -374,6 +374,6 @@ async function systemPage(){
  notice('LiveKit audio, wallet mutations and gameplay must be tested separately on real devices.')
 }
 
-function plannedPage(){const p=pages.find(x=>x[1]===currentPage);const name=p?p[2]:'Feature';notice(name+' is not connected yet. The demo preview cannot change Akira until its protected backend API and database operations are implemented and tested.');const c=card('Implementation status');line(c,'Feature',name);line(c,'Current state','Read-only placeholder · Not live');line(c,'Required','Authenticated endpoint + authorization + server-side validation');line(c,'Rollout','Backup → tests → staging → production')}
+function plannedPage(){const p=pages.find(x=>x[1]===currentPage);const name=p?p[2]:'Feature';notice(name+' is not available yet. This menu needs a protected backend API and app support before it can change live data.');const c=card('Implementation status');line(c,'Feature',name);line(c,'Current state','Not connected · no action taken');line(c,'Required','Authenticated endpoint + authorization + server-side validation');line(c,'Rollout','Backup → tests → staging → production')}
 loginPage();
 </script></body></html>

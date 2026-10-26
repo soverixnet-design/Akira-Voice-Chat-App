@@ -32,8 +32,16 @@ async function akiraStartVoice(){
     var data=await res.json();
     if(!res.ok)throw Error(data.error||"Voice server unavailable");
     var room=new window.LivekitClient.Room({adaptiveStream:true,dynacast:true});
-    room.on(window.LivekitClient.RoomEvent.TrackSubscribed,function(track){
-      if(track.kind==="audio"){var element=track.attach();element.dataset.akiraVoice="1";document.body.appendChild(element)}
+    room.on(window.LivekitClient.RoomEvent.TrackSubscribed,function(track,publication,participant){
+      if(track.kind==="audio"){
+        var peer=String(participant?.identity||'');
+        if(window.__akiraBlockedIds?.has(peer))return;
+        var element=track.attach();
+        element.dataset.akiraVoice="1";
+        element.dataset.akiraVoiceUser=peer;
+        element.autoplay=true;
+        document.body.appendChild(element);
+      }
     });
     room.on(window.LivekitClient.RoomEvent.TrackUnsubscribed,function(track){track.detach().forEach(function(el){el.remove()})});
     room.on(window.LivekitClient.RoomEvent.Disconnected,function(){
@@ -42,7 +50,8 @@ async function akiraStartVoice(){
     });
     await room.connect(data.url,data.token);
     akiraVoiceRoom=room;
-    await room.localParticipant.setMicrophoneEnabled(!myMute);
+    await room.localParticipant.setMicrophoneEnabled(!myMute && window.__akiraVoiceSeatActive===true);
+    window.dispatchEvent(new Event('akira:voice-connected'));
     akiraVoiceReady=true;
     toast("Live voice connected");
   }catch(err){toast("Voice: "+(err.message||"connection failed"))}
@@ -263,9 +272,9 @@ function land(el,tx,ty,o,idx,val){
   b.onfinish=function(){el.animate([{opacity:1},{opacity:0}],{duration:350,fill:"both"}).onfinish=function(){el.remove()}};
 }
 function gameSheet(){
-  var L=[["🎲","Ludo"],["🎯","Carrom"],["🎡","Food Wheel"],["🎰","Slot"],["🃏","Card"],["⭕","Tic-Tac"],["🧠","Memory"],["🎁","Lucky Spin"]];
+  var L=[["🎲","Ludo"],["🎯","Carrom"],["🎡","Food Wheel"],["🎰","Jackpot Fruit"],["🃏","Card"],["⭕","Tic-Tac"],["🧠","Memory"],["🎁","Lucky Spin"]];
   open('<h3>🎮 Games</h3><div class="gifts">'+L.map(function(g){return'<div class="gf" style="color:#fff"><span>'+g[0]+'</span>'+g[1]+'</div>'}).join("")+'</div>');
-  $("sheet").querySelectorAll(".gf").forEach(function(b){b.onclick=function(){var t=b.textContent;close();if(/Food Wheel/.test(t)){window.parent.postMessage({type:"akira:open-game",game:"food-wheel"},"*");return}if(window.__minor&&/Slot|Spin|Card/.test(t)){toast("This game is closed for users under 18");return}toast(t+" Coming soon")}})
+  $("sheet").querySelectorAll(".gf").forEach(function(b){b.onclick=function(){var t=b.textContent;close();if(/Food Wheel|Jackpot Fruit/.test(t)){window.parent.postMessage({type:"akira:open-game",game:/Food Wheel/.test(t)?"food-wheel":"jackpot-fruit"},window.location.origin);return}if(window.__minor&&/Slot|Spin|Card/.test(t)){toast("This game is closed for users under 18");return}toast(t+" Coming soon")}})
 }
 function msgSheet(){open('<h3>💬 Messages</h3><div class="row"><div>🧑‍🎤 Rafi<small>Coming tonight?</small></div><small>2m</small></div><div class="row"><div>👩‍🦰 Nusrat<small>Thanks for the gift 💜</small></div><small>10m</small></div><div class="row"><div>🎧 Customer service<small>Your request has been received</small></div><small>1h</small></div>')}
 $("roomBtn").onclick=settings;$("rrpill").onclick=rewardSheet;rrPill();$("bGift").onclick=giftSheet;$("bGame").onclick=gameSheet;$("bMsg").onclick=msgSheet;$("bOwn").onclick=ownSheet;
@@ -301,7 +310,7 @@ function seatEmoji(idx,e){
     s.animate([{transform:"translate("+(cx+(k-2)*8)+"px,"+(cy-sz/2)+"px) translate(-50%,-50%) scale(.5)",opacity:0},{opacity:1,offset:.2},{transform:"translate("+(cx+dx)+"px,"+(cy-sz/2-56-k*7)+"px) translate(-50%,-50%) scale(1.1)",opacity:0}],{duration:1300,delay:350+k*140,easing:"ease-out",fill:"both"}).onfinish=function(){this.effect.target.remove()};}
 }
 var UN=["Arif","Sumi","Hasan","Lima","Ronnie","Jui","Shakil","Tamanna","Emon","Nazma","Rifat","Pinky","Sohel","Mou","Zahid","Rumi","Nayan","Shiuli","Kamal","Rain"],UE=["🧑","👩","🧔","👧","🧑‍💻","👩‍🎓","🧑‍🚀","👩‍🍳","🧑‍🔧","👩‍⚕️","😎","🧑‍🎤"],U=[],FOL={};
-function sid(s){return s.i===0?$("rid").textContent:String(20000000+(s.n.charCodeAt(0)*7919+s.i*104729)%9000000)}
+function sid(s){if(s.real&&s.id)return String(s.id);return s.i===0?$("rid").textContent:String(20000000+(s.n.charCodeAt(0)*7919+s.i*104729)%9000000)}
 function total(){return seats.filter(function(s){return !s.empty&&!s.lock}).length+U.length}
 function usersSheet(q){
   open('<h3>👥 You are in a room <span id="utt">'+bn(total())+'</span> people</h3><input class="field" id="uq" placeholder="Search by name or ID" autocomplete="off"><div class="ul" id="ul"></div>');

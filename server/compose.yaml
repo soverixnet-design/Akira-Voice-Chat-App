@@ -10,6 +10,11 @@ services:
       PGUSER: akira
       PGDATABASE: akira_db
       PGPASSWORD_FILE: /run/secrets/db_password
+      AKIRA_ALLOWED_ORIGINS: "${AKIRA_ALLOWED_ORIGINS:-https://api.soverixnet.online,https://voice.soverixnet.online,https://localhost,capacitor://localhost}"
+      AKIRA_LIVEKIT_API_KEY: "${AKIRA_LIVEKIT_API_KEY:-}"
+      AKIRA_LIVEKIT_API_SECRET: "${AKIRA_LIVEKIT_API_SECRET:-}"
+      AKIRA_LIVEKIT_URL: "${AKIRA_LIVEKIT_URL:-}"
+      AKIRA_GAME_ENGINE_ENABLED: "${AKIRA_GAME_ENGINE_ENABLED:-false}"
     volumes:
       - /opt/akira/secrets/postgres_password:/run/secrets/db_password:ro
     ports:

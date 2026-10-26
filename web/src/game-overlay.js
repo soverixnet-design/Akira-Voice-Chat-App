@@ -19,18 +19,26 @@
   const frame=root.querySelector('iframe');
   function close(){root.classList.remove('open');frame.src='about:blank';}
   function open(game){
-    if(game!=='food-wheel'){if(typeof toast==='function')toast('Game is not yet available');return;}
+    if(!['food-wheel','jackpot-fruit'].includes(game)){if(typeof toast==='function')toast('Game is not yet available');return;}
     const inRoom=!!document.getElementById('rw')?.classList.contains('on');
     root.classList.toggle('inRoom',inRoom);
-    root.querySelector('.gameTitle').textContent='🎡 Food Wheel';
-    frame.src='food-wheel/index.html?demo=offline&lang=en&sound=0';
+    root.querySelector('.gameTitle').textContent=game==='food-wheel'?'🎡 Food Wheel':'🎰 Jackpot Fruit';
+    frame.src='game-live.html?game='+encodeURIComponent(game);
     root.classList.add('open');
   }
   root.querySelector('.gameClose').addEventListener('click',close);
   root.querySelector('.gameShade').addEventListener('click',close);
   window.addEventListener('message',e=>{
-    if(e.origin!==location.origin || e.source!==document.getElementById('rf')?.contentWindow)return;
-    if(e.data?.type==='akira:open-game')open(e.data.game);
+    if(e.origin!==location.origin)return;
+    if(e.source===frame.contentWindow && e.data?.type==='akira:game-ready'){
+      frame.contentWindow.postMessage({type:'akira:game-auth',token:akiraToken()},location.origin);
+      return;
+    }
+    if(e.source===frame.contentWindow && e.data?.type==='akira:wallet-updated'){
+      window.dispatchEvent(new Event('akira:wallet-updated'));
+      return;
+    }
+    if(e.source===document.getElementById('rf')?.contentWindow && e.data?.type==='akira:open-game')open(e.data.game);
   });
   document.getElementById('qg')?.addEventListener('click',()=>open('food-wheel'));
   window.AkiraGameOverlay={open,close};

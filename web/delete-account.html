@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>Akira — Delete account</title>
+<style>
+:root{color-scheme:dark}body{margin:0;min-height:100vh;display:grid;place-items:center;font:15px/1.5 system-ui;background:radial-gradient(circle at top,#4d257b,#080718 65%);color:#f5efff;padding:20px;box-sizing:border-box}
+main{max-width:430px;width:100%;border:1px solid #72529e;background:#160f30;padding:24px;border-radius:20px;box-sizing:border-box}
+h1{font-size:25px;margin:0 0 14px}p{color:#c6b8dc}label{display:block;margin:14px 0 6px}input{width:100%;box-sizing:border-box;border:1px solid #735899;background:#0a0920;border-radius:10px;padding:13px;color:white;font:inherit}button{border:0;border-radius:13px;background:#9b4dff;color:white;padding:13px;margin-top:18px;width:100%;font:700 15px system-ui}button:disabled{opacity:.6}
+#status{min-height:24px;margin-top:12px;color:#b8ffe2}small{color:#d2c2e5}
+</style></head><body>
+<main>
+<h1>Akira Account Deletion</h1>
+<p>Request the deletion of your Akira Voice Chat App account and associated personal data. Sign in with your registered Akira email and password; you do not need the app installed.</p>
+<form id="deleteForm"><label for="email">Account email</label><input id="email" type="email" required autocomplete="username" maxlength="254"><label for="password">Account password</label><input id="password" type="password" required autocomplete="current-password"><button id="submit">Send account deletion request</button></form>
+<p id="status" role="status" aria-live="polite"></p>
+<small>Your request goes to Akira support for review and processing. Account deletion is not immediate. Certain records may be retained where legally necessary for security, fraud prevention or financial reporting, as disclosed in the privacy policy.</small>
+</main>
+<script>
+(()=>{
+ const api='https://api.soverixnet.online';
+ const form=document.getElementById('deleteForm'),status=document.getElementById('status'),button=document.getElementById('submit');
+ form.addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!confirm('Request deletion of your Akira account and personal data?'))return;
+  button.disabled=true;status.textContent='Submitting securely...';
+  let token='';
+  try{
+   const email=document.getElementById('email').value.trim();
+   const password=document.getElementById('password').value;
+   const auth=await fetch(api+'/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+   const login=await auth.json().catch(()=>({}));
+   if(!auth.ok||!login.token)throw Error(login.error||'Sign in failed');
+   token=login.token;
+   const result=await fetch(api+'/api/v1/account/deletion-request',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({confirm:'DELETE'})});
+   const data=await result.json().catch(()=>({}));
+   if(!result.ok)throw Error(data.error||'Request not accepted');
+   status.textContent='Your account deletion request has been received. Support will process it according to the deletion policy.';
+   form.reset();button.textContent='Request received';
+  }catch(err){status.textContent='Unable to submit: '+err.message;button.disabled=false}
+  finally{
+   if(token)fetch(api+'/api/v1/auth/logout',{method:'POST',headers:{Authorization:'Bearer '+token}}).catch(()=>{});
+   document.getElementById('password').value='';
+  }
+ });
+})();
+</script></body></html>

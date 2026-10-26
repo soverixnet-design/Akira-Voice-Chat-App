@@ -1,0 +1,74 @@
+name: Akira code checks
+on:
+  push:
+    branches:
+      - fix/akira-ci-auth-20261025
+  pull_request:
+    paths:
+      - 'server/**'
+      - 'web/src/**'
+      - 'web/admin-connected.html'
+      - '.github/workflows/akira-tests.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install API dependencies
+        working-directory: server
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Check JavaScript syntax
+        run: |
+          node --check server/src/server.mjs
+          node --check server/src/seller-admin.mjs
+          node --check server/src/seller-wallet.mjs
+          node --check web/src/seller-panel.js
+          node --check web/src/seller-directory.js
+          node --check scripts/smoke-prod.mjs
+      - name: Check staging and deployment shell syntax
+        run: |
+          bash -n scripts/deploy-akira-seller-safe.sh
+          bash -n scripts/install-admin-finance.sh
+      - name: Check embedded Python syntax in deployment
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s=Path('scripts/deploy-akira-seller-safe.sh').read_text()
+          blocks=re.findall(r"<<'PY'\n(.*?)\nPY",s,re.DOTALL)
+          assert len(blocks)>=4, f'Expected Python deployment blocks, got {len(blocks)}'
+          for i,src in enumerate(blocks):
+              compile(src,f'deploy-block-{i+1}','exec')
+          print(f'PASS: {len(blocks)} embedded Python blocks compile')
+          PY
+
+      - name: Run unit and regression tests
+        working-directory: server
+        run: npm test
+      - name: Verify API health inside an isolated Docker container
+        run: |
+          set -euo pipefail
+          docker build -t akira-stage-smoke ./server
+          docker run -d --name akira-stage-smoke --read-only --tmpfs /tmp \
+            -e HOST=0.0.0.0 -e PORT=4301 \
+            -e AKIRA_GAME_ENGINE_ENABLED=false \
+            -e AKIRA_ALLOWED_ORIGINS=https://api.soverixnet.online \
+            akira-stage-smoke
+          trap 'docker logs --tail 15 akira-stage-smoke || true; docker rm -f akira-stage-smoke >/dev/null 2>&1 || true' EXIT
+          ready=0
+          for i in $(seq 1 20); do
+            if docker exec akira-stage-smoke node -e "fetch('http://127.0.0.1:4301/health').then(async r=>{const j=await r.json();process.exit(r.status===200&&j.ok===true?0:1)}).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          docker exec akira-stage-smoke node -e "fetch('http://127.0.0.1:4301/health',{headers:{Origin:'https://api.soverixnet.online'}}).then(r=>process.exit(r.headers.get('access-control-allow-origin')==='https://api.soverixnet.online'?0:1)).catch(()=>process.exit(1))"
+

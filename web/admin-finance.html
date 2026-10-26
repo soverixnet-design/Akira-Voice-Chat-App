@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Akira Wallet Recharge & Coin Seller Management</title>
+<style>
+:root{color-scheme:dark;--bg:#090920;--panel:#191536;--line:#51477c;--muted:#c2b9e0;--success:#8df5cc;--danger:#ffb8c2}*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at top left,#462577,var(--bg) 65%);color:#fff;font:15px/1.5 system-ui,-apple-system,sans-serif}
+main{width:min(920px,100%);padding:18px;margin:auto}.hero{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:10px 0 20px}.hero h1{font-size:22px;margin:0}.sub{font-size:13px;color:var(--muted)}
+.card{background:linear-gradient(145deg,#221a48,var(--panel));border:1px solid var(--line);border-radius:20px;padding:20px;margin:14px 0;box-shadow:0 8px 25px #0002}
+.card h2{margin:0 0 8px;font-size:18px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 5px}input{width:100%;min-width:0;background:#0e0d29;border:1px solid #6c599a;color:#fff;padding:13px;border-radius:12px;font:inherit}input:focus{outline:2px solid #ac80ff}
+button,.nav{border:0;border-radius:12px;padding:12px 17px;font:700 14px system-ui;background:linear-gradient(110deg,#8548e9,#c04eaf);color:#fff;cursor:pointer;min-height:45px}
+button:disabled{opacity:.5;cursor:not-allowed}.secondary{background:#3c365d}.success{background:#17694e}.danger{background:#922c49}
+.controls{display:flex;flex-wrap:wrap;gap:9px;margin-top:13px}.controls>*{flex:1}.small{padding:9px 12px;min-height:35px}.status{color:var(--muted);min-height:22px;overflow-wrap:anywhere;white-space:pre-wrap}.status.ok{color:var(--success)}.status.bad{color:var(--danger)}
+.ident{padding:12px;margin:11px 0;border:1px solid #625a9a;border-radius:12px;background:#100f2c}.ident strong{display:block}.ident small{color:var(--muted)}
+.hidden{display:none!important}.rows{max-height:320px;overflow-y:auto}.entry{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 2px;border-bottom:1px solid #ffffff22}.entry small{color:var(--muted)}.notice{font-size:13px;color:var(--muted)}
+a{color:#d9beff}@media(max-width:640px){.grid{grid-template-columns:1fr}.hero{align-items:flex-start;flex-wrap:wrap}main{padding:12px}.card{padding:16px}}
+</style></head>
+<body><main>
+<header class="hero"><div><h1>🪙 Akira Wallet & Coin Sellers</h1><div class="sub">Connected Super Admin Finance Panel — original wallet, not demo coins</div></div><a class="nav" href="/admin" style="text-decoration:none">← Main Admin</a></header>
+<section class="card" id="loginPanel"><h2>Admin login</h2><p class="sub">Only an Akira account with the Super Admin role can credit coins.</p>
+<form id="login"><label for="email">Email</label><input id="email" type="email" autocomplete="username" required><label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>
+<div class="controls"><button id="loginBtn" type="submit">Sign in securely</button></div></form><p id="loginStatus" class="status" role="status"></p></section>
+<div id="financePanel" class="hidden">
+<div class="card"><div class="hero" style="margin:0"><div><h2>Finance access verified</h2><div class="sub" id="adminRole"></div></div><button id="logout" class="secondary small" type="button">Log out</button></div></div>
+<div class="grid">
+<section class="card" id="rechargePanel"><h2>💰 Recharge user wallet</h2><p class="notice">Credits coins to the user's original Akira Wallet, which games also use.</p>
+<label for="rechargeId">User 6-digit ID</label><input id="rechargeId" placeholder="100001" inputmode="numeric" maxlength="6" autocomplete="off">
+<div class="controls"><button id="checkUser" type="button" class="secondary">Check user ID</button></div><div class="ident hidden" id="rechargeIdentity"></div>
+<label for="rechargeAmount">Coins to add</label><input id="rechargeAmount" type="number" inputmode="numeric" min="1" step="1" placeholder="1000">
+<div class="controls"><button id="rechargeButton" type="button">Add coins to real wallet</button></div><p id="rechargeStatus" class="status" role="status"></p></section>
+<section class="card" id="sellerPanel"><h2>🪙 Coin Seller inventory</h2><p class="notice">Seller Coins are separate from the seller's personal wallet. The seller must be enabled before sending coins to users.</p>
+<label for="sellerId">Seller 6-digit ID</label><input id="sellerId" placeholder="100001" inputmode="numeric" maxlength="6" autocomplete="off">
+<div class="controls"><button id="checkSeller" class="secondary" type="button">Check seller ID</button></div><div class="ident hidden" id="sellerIdentity"></div>
+<label for="sellerAmount">Seller Coins to allocate</label><input id="sellerAmount" type="number" inputmode="numeric" min="1" step="1" placeholder="5000">
+<div class="controls"><button id="allocateButton" type="button">Add Seller Balance</button></div>
+<div class="controls"><button id="enableButton" class="success" type="button">Enable seller</button><button id="disableButton" class="danger" type="button">Disable seller</button></div>
+<p id="sellerStatus" class="status" role="status"></p></section>
+</div>
+<section class="card"><div class="hero" style="margin:0 0 8px"><div><h2>✅ Verified Coin Seller List</h2><p class="sub">Only enabled, non-banned sellers from the Akira database.</p></div><button id="refreshSellers" class="secondary small" type="button">Refresh</button></div><div id="sellerList" class="rows"></div><p id="listStatus" class="status"></p></section>
+<section class="card"><h2>Transaction safety</h2><p class="notice">Each recharge and allocation uses a unique request ID. If the connection fails, the same request ID is retained until that transaction is confirmed. Do not change the ID or amount to retry an uncertain transfer. Server records are authoritative.</p><p class="notice">This page never stores your password or session token in browser storage. User wallet recharge and seller inventory allocation are two different operations.</p></section>
+</div></main>
+<script>
+(()=>{
+'use strict';
+const API='https://api.soverixnet.online';
+const by=id=>document.getElementById(id);
+let authToken='',authorized=false;
+const pending={recharge:null,seller:null};
+const uuid=()=>{
+ if(typeof crypto.randomUUID==='function')return crypto.randomUUID();
+ const b=crypto.getRandomValues(new Uint8Array(16));b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;
+ const h=Array.from(b,x=>x.toString(16).padStart(2,'0'));
+ return h.slice(0,4).join('')+'-'+h.slice(4,6).join('')+'-'+h.slice(6,8).join('')+'-'+h.slice(8,10).join('')+'-'+h.slice(10).join('');
+};
+const validId=id=>/^\d{6}$/.test(id);
+const show=(id,message,kind='')=>{const node=by(id);node.textContent=message;node.className='status '+kind};
+async function call(path,method='GET',payload=null,includeAuth=true){
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+ try{
+  const response=await fetch(API+path,{method,cache:'no-store',signal:controller.signal,
+   headers:{Accept:'application/json',...(payload?{'Content-Type':'application/json'}:{}),...(includeAuth?{Authorization:'Bearer '+authToken}:{})},
+   body:payload?JSON.stringify(payload):undefined});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error((data.error||'HTTP '+response.status)+' (HTTP '+response.status+')');
+  return data;
+ }catch(error){if(error.name==='AbortError')throw Error('Timed out: result unknown. Verify history before retrying.');throw error}
+ finally{clearTimeout(timer)}
+}
+async function lookup(id,target){
+ const data=await call('/api/v1/admin/users/search?id='+encodeURIComponent(id));
+ const node=by(target);node.replaceChildren();
+ if(!data.user){node.classList.add('hidden');throw Error('User ID not found')}
+ const name=document.createElement('strong'),meta=document.createElement('small');
+ name.textContent=data.user.display_name||data.user.displayName||'Akira User';
+ meta.textContent='Verified ID: '+String(data.user.public_id||data.user.publicId)+' · Country: '+String(data.user.country_code||data.user.countryCode||'—');
+ node.append(name,meta);node.classList.remove('hidden');
+ return data.user;
+}
+async function signIn(event){
+ event.preventDefault();const btn=by('loginBtn');btn.disabled=true;
+ show('loginStatus','Verifying Super Admin account…');
+ try{
+  const data=await call('/api/v1/auth/login','POST',{email:by('email').value.trim(),password:by('password').value},false);
+  by('password').value='';
+  if(!data.token)throw Error('Login token unavailable');
+  authToken=data.token;
+  const verified=await call('/api/v1/admin/dashboard');
+  if(verified.role!=='super_admin')throw Error('This account does not have Super Admin finance permission');
+  authorized=true;by('adminRole').textContent='Role: Super Admin';
+  by('loginPanel').classList.add('hidden');by('financePanel').classList.remove('hidden');
+  await sellers();
+ }catch(error){authToken='';authorized=false;show('loginStatus','Sign in failed: '+error.message,'bad')}
+ finally{by('password').value='';btn.disabled=false}
+}
+function readAmount(id){
+ const value=by(id).value.trim();
+ if(!/^[1-9]\d*$/.test(value))throw Error('Enter a positive whole number of coins');
+ const n=Number(value);
+ if(!Number.isSafeInteger(n)||n>1000000000)throw Error('Maximum per operation is 1,000,000,000 coins');
+ return n;
+}
+function readId(id){const value=by(id).value.trim();if(!validId(value))throw Error('Enter a valid 6-digit User ID');return value}
+async function perform(kind){
+ if(!authorized)return;
+ const wallet=kind==='recharge';const idInput=wallet?'rechargeId':'sellerId';
+ const amountInput=wallet?'rechargeAmount':'sellerAmount';
+ const button=by(wallet?'rechargeButton':'allocateButton');const status=wallet?'rechargeStatus':'sellerStatus';
+ let id,amount;
+ try{id=readId(idInput);amount=readAmount(amountInput)}catch(e){return show(status,e.message,'bad')}
+ button.disabled=true;show(status,'Verifying destination account…');
+ try{
+  const account=await lookup(id,wallet?'rechargeIdentity':'sellerIdentity');
+  const key=id+':'+amount;
+  if(pending[kind] && pending[kind].key!==key)
+   throw Error('A previous '+kind+' is not confirmed. Restore its ID/amount to safely retry; do not start another transfer yet.');
+  if(!confirm((wallet?'Recharge ORIGINAL wallet':'Add SELLER inventory')+'?\nName: '+(account.display_name||account.displayName||'User')+'\nUser ID: '+id+'\nCoins: '+amount.toLocaleString('en-US')))return show(status,'Cancelled. No coins changed.');
+  if(!pending[kind])pending[kind]={key,requestId:uuid()};
+  show(status,'Sending transaction…');
+  const endpoint=wallet?'/api/v1/admin/wallet/recharge':'/api/v1/admin/sellers/allocate';
+  const result=await call(endpoint,'POST',{publicId:id,amount,requestId:pending[kind].requestId});
+  pending[kind]=null;
+  const after=wallet?result.wallet?.balance:result.balance;
+  show(status,(result.duplicate?'Already processed — not charged twice.':'Coins successfully added.')+'\nUser ID: '+id+'\n'+(wallet?'Original Wallet':'Seller Balance')+': '+Number(after).toLocaleString('en-US'),'ok');
+  if(!wallet)await sellers();
+ }catch(e){show(status,'Not confirmed: '+e.message,'bad')}
+ finally{button.disabled=false}
+}
+async function setSeller(enabled){
+ if(!authorized)return;
+ let id;try{id=readId('sellerId')}catch(e){return show('sellerStatus',e.message,'bad')}
+ const btn=by(enabled?'enableButton':'disableButton');btn.disabled=true;
+ try{
+  const user=await lookup(id,'sellerIdentity');
+  if(!confirm((enabled?'Enable':'Disable')+' seller?\nName: '+(user.display_name||user.displayName||'User')+'\nUser ID: '+id+'\nSeller inventory will not be erased.'))return;
+  const result=await call('/api/v1/admin/sellers/status','POST',{publicId:id,enabled});
+  show('sellerStatus','User '+id+': Seller '+(result.enabled?'enabled':'disabled')+'. Wallet balances unchanged.','ok');
+  await sellers();
+ }catch(e){show('sellerStatus','Permission update failed: '+e.message,'bad')}
+ finally{btn.disabled=false}
+}
+async function sellers(){
+ const list=by('sellerList');list.replaceChildren();show('listStatus','Loading verified sellers…');
+ try{
+  const data=await call('/api/v1/sellers','GET',null,false);
+  const arr=Array.isArray(data.sellers)?data.sellers:[];
+  if(!arr.length){show('listStatus','No enabled Coin Sellers yet.');return}
+  for(const seller of arr){
+   const row=document.createElement('div');row.className='entry';
+   const info=document.createElement('span'),name=document.createElement('strong'),id=document.createElement('small');
+   name.textContent=seller.displayName||'Coin Seller';id.textContent='ID '+String(seller.publicId||'');
+   info.append(name,document.createElement('br'),id);
+   const copy=document.createElement('button');copy.className='secondary small';copy.type='button';copy.textContent='Select';
+   copy.onclick=()=>{by('sellerId').value=String(seller.publicId||'');show('sellerStatus','Seller '+seller.publicId+' selected.')};
+   row.append(info,copy);list.appendChild(row);
+  }
+  show('listStatus',arr.length+' active sellers','ok');
+ }catch(e){show('listStatus','Seller list unavailable: '+e.message,'bad')}
+}
+async function check(input,view,status){
+ try{const id=readId(input);await lookup(id,view);show(status,'Account verified.','ok')}
+ catch(e){by(view).classList.add('hidden');show(status,e.message,'bad')}
+}
+by('login').addEventListener('submit',signIn);
+by('checkUser').onclick=()=>check('rechargeId','rechargeIdentity','rechargeStatus');
+by('checkSeller').onclick=()=>check('sellerId','sellerIdentity','sellerStatus');
+by('rechargeButton').onclick=()=>perform('recharge');
+by('allocateButton').onclick=()=>perform('seller');
+by('enableButton').onclick=()=>setSeller(true);
+by('disableButton').onclick=()=>setSeller(false);
+by('refreshSellers').onclick=sellers;
+by('logout').onclick=async()=>{
+ const token=authToken;authToken='';authorized=false;pending.recharge=null;pending.seller=null;
+ by('financePanel').classList.add('hidden');by('loginPanel').classList.remove('hidden');
+ by('email').value='';by('password').value='';show('loginStatus','Signed out.');
+ if(token){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);
+  try{await fetch(API+'/api/v1/auth/logout',{method:'POST',signal:controller.signal,headers:{Authorization:'Bearer '+token}})}catch{}finally{clearTimeout(timer)}
+ }
+};
+})();
+</script></body></html>

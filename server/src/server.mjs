@@ -1,14 +1,38 @@
-import { getWallet, walletHistory } from './wallet.mjs';
+import { getWallet, walletHistory, applyWalletDelta } from './wallet.mjs';
+import { sellerBalance, sellerCredit, sellerSend } from './seller-wallet.mjs';
+import { setSellerStatus } from './seller-admin.mjs';
 import { placeGameBet } from './game-bets.mjs';
 import { startGameEngine } from './game-engine.mjs';
 import { profileRoutes } from './profiles.mjs';
 import { requireAdmin, adminStats } from './admin.mjs';
+import {adminUpdateRoom} from './admin-room-control.mjs';
 import http from 'node:http';
 import { listRooms, getRoom, getPool } from './database.mjs';
 import { register, login, authenticate, logout, profile } from './auth.mjs';
 import { randomUUID, createHmac } from 'node:crypto';
 import { createRoom, joinRoom, leaveRoom } from './rooms.mjs';
+import {roomSeats,setSeat,updateRoomSettings} from './room-seats.mjs';
+import {deletionRequestStatus,submitDeletionRequest} from './account-deletion.mjs';
+import {dailyRewardStatus,claimDailyReward} from './daily-rewards.mjs';
+import {googleClientId,googleSignIn,linkGoogleAccount} from './google-auth.mjs';
 import { pathToFileURL } from 'node:url';
+/* Preserve pre-existing Akira admin handlers when deploying over an established
+   server. Fresh installations do not include these optional legacy modules. */
+async function loadOptionalLegacyModule(path) {
+  try { return await import(path); }
+  catch (error) {
+    if (error.code === 'ERR_MODULE_NOT_FOUND' &&
+        String(error.message).includes(path.replace('./',''))) return {};
+    throw error;
+  }
+}
+const {controlRoutes: legacyControlRoutes} = await loadOptionalLegacyModule('./control.mjs');
+const {serveAdmin: legacyServeAdmin} = await loadOptionalLegacyModule('./admin-panel.mjs');
+if (legacyControlRoutes && typeof legacyControlRoutes !== 'function')
+  throw Error('invalid_legacy_control_routes');
+if (legacyServeAdmin && typeof legacyServeAdmin !== 'function')
+  throw Error('invalid_legacy_admin_handler');
+
 
 const port = Number(process.env.PORT || 4301);
 const host = process.env.HOST || '127.0.0.1';
@@ -18,6 +42,7 @@ const allowedOrigins = new Set((process.env.AKIRA_ALLOWED_ORIGINS || '').split('
 
 export const requestHandler = async (req, res) => {
   const url = new URL(req.url || '/', 'http://localhost');
+  if (legacyServeAdmin && legacyServeAdmin(req,res,url)) return;
   if (/^\/rooms\/\d{1,18}\/voice-token$/.test(url.pathname)) url.pathname = '/api/v1' + url.pathname;
   const origin = req.headers.origin;
   const originAllowed = Boolean(origin && allowedOrigins.has(origin));
@@ -43,6 +68,28 @@ export const requestHandler = async (req, res) => {
     });
     return res.end();
   }
+  if (legacyControlRoutes && await legacyControlRoutes(req,url,send)) return;
+  if(req.method==='GET'&&url.pathname==='/api/v1/auth/google/config'){
+    const clientId=googleClientId();
+    return send(200,{enabled:!!clientId,clientId});
+  }
+  if(url.pathname==='/api/v1/auth/google' || url.pathname==='/api/v1/auth/google/link'){
+    if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+    try{
+      const linking=url.pathname.endsWith('/link');
+      let user=null;
+      if(linking){
+        user=await authenticate(req.headers.authorization);
+        if(!user)return send(401,{error:'unauthorized'});
+      }
+      let raw='';
+      for await(const chunk of req){raw+=chunk;if(raw.length>10000)return send(413,{error:'payload_too_large'})}
+      let body;try{body=JSON.parse(raw)}catch{return send(400,{error:'invalid_json'})}
+      if(typeof body?.idToken!=='string'||body.idToken.length>8192)return send(400,{error:'invalid_google_credential'});
+      const result=linking?await linkGoogleAccount(user,body.idToken):await googleSignIn(body.idToken);
+      return send(result.status,result.body);
+    }catch(err){console.error('google_sign_in_failed',err.code||err.message);return send(503,{error:'google_login_unavailable'})}
+  }
   if (req.method === 'POST' && ['/api/v1/auth/register','/api/v1/auth/login'].includes(url.pathname)) {
     try {
       let raw = '';
@@ -59,6 +106,83 @@ export const requestHandler = async (req, res) => {
       console.error('auth_failed',err.code || err.message);
       return send(503,{error:'auth_unavailable'});
     }
+  }
+  if(url.pathname==='/api/v1/account/deletion-request'){
+    try{
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      if(req.method==='GET'){
+        const result=await deletionRequestStatus(user.id);
+        return send(result.status,result.body);
+      }
+      if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+      let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>2048)return send(413,{error:'payload_too_large'})}
+      let body;try{body=JSON.parse(raw)}catch{return send(400,{error:'invalid_json'})}
+      const result=await submitDeletionRequest(user.id,body);
+      return send(result.status,result.body);
+    }catch(err){console.error('account_deletion_request_failed',err.code||err.message);return send(503,{error:'account_deletion_request_unavailable'})}
+  }
+  if(url.pathname==='/api/v1/rewards/daily'){
+    try{
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      if(req.method==='GET'){
+        const result=await dailyRewardStatus(user.id);
+        return send(result.status,result.body);
+      }
+      if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+      const result=await claimDailyReward(user.id);
+      return send(result.status,result.body);
+    }catch(err){console.error('daily_reward_failed',err.code||err.message);return send(503,{error:'daily_reward_unavailable'})}
+  }
+  if (req.method === 'GET' && url.pathname === '/api/v1/sellers') {
+    try {
+      const {rows}=await getPool().query("SELECT u.public_id AS \"publicId\",u.display_name AS \"displayName\",u.avatar_url AS \"avatarUrl\" FROM akira_seller_wallets s JOIN akira_users u ON u.id=s.user_id WHERE s.enabled=true AND u.is_banned=false ORDER BY u.public_id LIMIT 200");
+      return send(200,{sellers:rows});
+    } catch(err) {console.error('seller_list_failed',err.message);return send(503,{error:'seller_list_unavailable'});}
+  }
+  if (['/api/v1/seller/wallet','/api/v1/seller/transfer','/api/v1/seller/history','/api/v1/admin/sellers/allocate','/api/v1/admin/sellers/status'].includes(url.pathname)) {
+    try {
+      if (url.pathname==='/api/v1/admin/sellers/allocate') {
+        if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+        const admin=await requireAdmin(req.headers.authorization);
+        if(admin.error)return send(admin.status,{error:admin.error});
+        if(admin.role!=='super_admin')return send(403,{error:'super_admin_required'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+        let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'invalid_json'});}
+        const result=await sellerCredit(admin.user.id,body.publicId,body.amount,body.requestId);
+        return send(result.status,result);
+      }
+      if (url.pathname==='/api/v1/admin/sellers/status') {
+        if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+        const admin=await requireAdmin(req.headers.authorization);
+        if(admin.error)return send(admin.status,{error:admin.error});
+        if(admin.role!=='super_admin')return send(403,{error:'super_admin_required'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+        let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'invalid_json'});}
+        const result=await setSellerStatus(admin.user.id,body?.publicId,body?.enabled);
+        return send(result.status,result);
+      }
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      if(url.pathname==='/api/v1/seller/history'){
+        if(req.method!=='GET')return send(405,{error:'method_not_allowed'});
+        const seller=await sellerBalance(user.id);
+        if(!seller||!seller.enabled)return send(403,{error:'seller_not_enabled'});
+        const {rows}=await getPool().query('SELECT t.id,u.public_id AS "recipientId",t.amount,t.created_at AS "createdAt" FROM akira_seller_transfers t JOIN akira_users u ON u.id=t.recipient_id WHERE t.seller_id=$1 ORDER BY t.id DESC LIMIT 50',[user.id]);
+        return send(200,{transfers:rows});
+      }
+      if(url.pathname==='/api/v1/seller/wallet'){
+        if(req.method!=='GET')return send(405,{error:'method_not_allowed'});
+        const wallet=await sellerBalance(user.id);
+        return wallet&&wallet.enabled?send(200,{wallet}):send(403,{error:'seller_not_enabled'});
+      }
+      if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+      let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+      let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'invalid_json'});}
+      const result=await sellerSend(user.id,body.publicId,body.amount,body.requestId);
+      return send(result.status,result);
+    }catch(err){console.error('seller_wallet_failed',err.message);return send(503,{error:'seller_wallet_unavailable'});}
   }
   if (req.method === 'GET' && ['/api/v1/wallet','/api/v1/wallet/history'].includes(url.pathname)) {
     try {
@@ -86,7 +210,7 @@ export const requestHandler = async (req, res) => {
       ]);
       return send(200,{app:appId,wallet,games:['food-wheel','jackpot-fruit'],
         todayWinnings24h:Number(winnings.rows[0].total),recentBets:recent.rows,
-        bettingEnabled:false});
+        bettingEnabled:process.env.AKIRA_GAME_ENGINE_ENABLED==='true'});
     } catch(err) {console.error('game_overview_failed',err.message);return send(503,{error:'games_unavailable'}); }
   }
   const roundMatch=url.pathname.match(/^\/api\/v1\/games\/(food-wheel|jackpot-fruit)\/round$/);
@@ -105,6 +229,8 @@ export const requestHandler = async (req, res) => {
     try {
       const user=await authenticate(req.headers.authorization);
       if(!user) return send(401,{error:'unauthorized'});
+      // Never debit coins while the result settlement engine is stopped.
+      if(process.env.AKIRA_GAME_ENGINE_ENABLED!=='true')return send(503,{error:'game_engine_disabled'});
       let raw='';
       for await (const chunk of req) {
         raw+=chunk;
@@ -161,6 +287,24 @@ export const requestHandler = async (req, res) => {
       return send(200,{ok:true,app:appId});
     } catch(err) { console.error('logout_failed',err.message); return send(503,{error:'auth_unavailable'}); }
   }
+  const roomSeatRoute=url.pathname.match(/^\/api\/v1\/rooms\/(\d{6,18})\/(seats|seat|settings)$/);
+  if(roomSeatRoute){
+    try{
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      const [,roomId,action]=roomSeatRoute;
+      if(action==='seats' && req.method==='GET'){
+        const result=await roomSeats(user,roomId);
+        return send(result.status,result.body);
+      }
+      if(req.method!=='POST'||action==='seats')return send(405,{error:'method_not_allowed'});
+      let raw='';
+      for await (const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+      let body;try{body=JSON.parse(raw)}catch{return send(400,{error:'invalid_json'})}
+      const result=action==='seat'?await setSeat(user,roomId,body):await updateRoomSettings(user,roomId,body);
+      return send(result.status,result.body);
+    }catch(e){console.error('room_seat_failed',e.code||e.message);return send(503,{error:'room_seats_unavailable'})}
+  }
   const roomWrite = req.method === 'POST' && (url.pathname === '/api/v1/rooms' || /^\/api\/v1\/rooms\/\d{1,18}\/(join|leave)$/.test(url.pathname));
   if (roomWrite) {
     try {
@@ -202,6 +346,96 @@ export const requestHandler = async (req, res) => {
     try { const room = await getRoom(roomMatch[1]); return room ? send(200, { app: appId, room }) : send(404, { error: 'room_not_found', app: appId }); }
     catch (err) { console.error('room_read_failed', err.message); return send(503, { error: 'database_unavailable', app: appId }); }
   }
+  if (req.method==='GET' && url.pathname==='/api/v1/users/blocks'){
+    try{
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      const {rows}=await getPool().query(
+        'SELECT u.public_id::text AS "publicId" FROM akira_user_blocks b JOIN akira_users u ON u.id=b.blocked_id WHERE b.blocker_id=$1',
+        [user.id]);
+      return send(200,{blockedIds:rows.map(r=>r.publicId)});
+    }catch(err){console.error('user_blocks_failed',err.message);return send(503,{error:'blocks_unavailable'})}
+  }
+  if (req.method==='POST' && ['/api/v1/users/report','/api/v1/users/block'].includes(url.pathname)){
+    try{
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>3072)return send(413,{error:'payload_too_large'})}
+      let body;try{body=JSON.parse(raw)}catch{return send(400,{error:'invalid_json'})}
+      const targetId=String(body?.publicId??'');
+      if(!/^\d{6}$/.test(targetId))return send(400,{error:'invalid_target_id'});
+      const {rows}=await getPool().query('SELECT id FROM akira_users WHERE public_id=$1 AND is_banned=false',[targetId]);
+      if(!rows.length)return send(404,{error:'user_not_found'});
+      const target=rows[0].id;
+      if(String(target)===String(user.id))return send(400,{error:'cannot_report_or_block_self'});
+      if(url.pathname.endsWith('/block')){
+        if(typeof body.blocked!=='boolean')return send(400,{error:'invalid_block_action'});
+        if(body.blocked){
+          await getPool().query('INSERT INTO akira_user_blocks(blocker_id,blocked_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[user.id,target]);
+        }else{
+          await getPool().query('DELETE FROM akira_user_blocks WHERE blocker_id=$1 AND blocked_id=$2',[user.id,target]);
+        }
+        return send(200,{ok:true,publicId:targetId,blocked:body.blocked});
+      }
+      const reason=body.reason,details=body.details??'';
+      if(!['harassment','spam','fraud','inappropriate','other'].includes(reason)||
+         typeof details!=='string'||details.length>500)
+        return send(400,{error:'invalid_report'});
+      const recent=await getPool().query("SELECT 1 FROM akira_user_reports WHERE reporter_id=$1 AND reported_user_id=$2 AND created_at>now()-interval '24 hours' LIMIT 1",[user.id,target]);
+      if(recent.rows.length)return send(409,{error:'report_already_submitted'});
+      await getPool().query('INSERT INTO akira_user_reports(reporter_id,reported_user_id,reason,details) VALUES($1,$2,$3,$4)',[user.id,target,reason,details.trim()]);
+      return send(201,{ok:true,reviewStatus:'open'});
+    }catch(err){console.error('user_safety_failed',err.message);return send(503,{error:'moderation_unavailable'})}
+  }
+  if (req.method==='GET' && url.pathname==='/api/v1/admin/reports'){
+    try{
+      const admin=await requireAdmin(req.headers.authorization);
+      if(admin.error)return send(admin.status,{error:admin.error});
+      const {rows}=await getPool().query(`SELECT r.id,r.reason,r.details,r.status,r.created_at AS "createdAt",
+        u.public_id::text AS "reportedId",s.public_id::text AS "reporterId"
+        FROM akira_user_reports r JOIN akira_users u ON u.id=r.reported_user_id
+        JOIN akira_users s ON s.id=r.reporter_id ORDER BY r.created_at DESC LIMIT 100`);
+      return send(200,{reports:rows});
+    }catch(err){console.error('report_queue_failed',err.message);return send(503,{error:'moderation_unavailable'})}
+  }
+  if (url.pathname === '/api/v1/admin/deletion-requests' && req.method === 'GET') {
+    try{
+      const admin=await requireAdmin(req.headers.authorization);
+      if(admin.error)return send(admin.status,{error:admin.error});
+      if(admin.role!=='super_admin')return send(403,{error:'super_admin_required'});
+      const {rows}=await getPool().query(
+       'SELECT d.id,d.requested_at AS "requestedAt",d.status,u.public_id::text AS "publicId",u.display_name AS "displayName" FROM akira_account_deletion_requests d JOIN akira_users u ON u.id=d.user_id ORDER BY d.requested_at DESC LIMIT 100');
+      return send(200,{requests:rows});
+    }catch(err){console.error('deletion_queue_failed',err.message);return send(503,{error:'deletion_queue_unavailable'})}
+  }
+  if (req.method==='POST' && url.pathname==='/api/v1/admin/rooms/update'){
+    try{
+      const admin=await requireAdmin(req.headers.authorization);
+      if(admin.error)return send(admin.status,{error:admin.error});
+      if(admin.role!=='super_admin')return send(403,{error:'super_admin_required'});
+      let raw='';
+      for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+      let body;try{body=JSON.parse(raw)}catch{return send(400,{error:'invalid_json'})}
+      const result=await adminUpdateRoom(admin.user.id,body);
+      return send(result.status,result.body);
+    }catch(err){console.error('admin_room_update_failed',err.code||err.message);return send(503,{error:'room_control_unavailable'})}
+  }
+  if (req.method==='GET' && url.pathname==='/api/v1/admin/game-status'){
+    try{
+      const admin=await requireAdmin(req.headers.authorization);
+      if(admin.error)return send(admin.status,{error:admin.error});
+      const names=[
+        {name:'food-wheel',table:'akira_food_rounds'},
+        {name:'jackpot-fruit',table:'akira_jackpot_rounds'}
+      ];
+      const games=[];
+      for(const {name,table} of names){
+        const {rows}=await getPool().query(`SELECT id::text, starts_at AS "startsAt",betting_ends_at AS "endsAt",settled_at AS "settledAt" FROM ${table} ORDER BY id DESC LIMIT 1`);
+        games.push({name,round:rows[0]||null});
+      }
+      return send(200,{enabled:process.env.AKIRA_GAME_ENGINE_ENABLED==='true',games});
+    }catch(err){console.error('admin_games_failed',err.code||err.message);return send(503,{error:'game_status_unavailable'})}
+  }
   if (req.method === 'GET' && url.pathname === '/api/v1/admin/dashboard') {
     try {
       const admin = await requireAdmin(req.headers.authorization);
@@ -212,6 +446,35 @@ export const requestHandler = async (req, res) => {
       return send(503,{error:'admin_unavailable'});
     }
   }
+  // Super-admin recharge: credit the authoritative wallet, never a browser-local balance.
+  if (req.method === 'POST' && url.pathname === '/api/v1/admin/wallet/recharge') {
+    try {
+      const admin = await requireAdmin(req.headers.authorization);
+      if (admin.error) return send(admin.status,{error:admin.error});
+      if (admin.role !== 'super_admin') return send(403,{error:'super_admin_required'});
+      let raw='';
+      for await (const chunk of req) {
+        raw+=chunk;
+        if (raw.length>4096) return send(413,{error:'payload_too_large'});
+      }
+      let body;
+      try {body=JSON.parse(raw);} catch {return send(400,{error:'invalid_json'});}
+      const publicId=String(body?.publicId??'');
+      const amount=body?.amount;
+      const requestId=body?.requestId;
+      if (!/^\d{6}$/.test(publicId) || !Number.isSafeInteger(amount) || amount<=0 ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId||''))
+        return send(400,{error:'invalid_recharge'});
+      const {rows}=await getPool().query('SELECT id FROM akira_users WHERE public_id=$1',[publicId]);
+      if (!rows.length) return send(404,{error:'user_not_found'});
+      const wallet=await applyWalletDelta(rows[0].id,amount,'admin_recharge','admin_recharge:'+admin.user.id+':'+requestId);
+      return send(200,{ok:true,publicId,wallet});
+    } catch(err) {
+      console.error('admin_recharge_failed',err.message);
+      return send(503,{error:'admin_recharge_unavailable'});
+    }
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/v1/admin/users/search') {
     try {
       const admin = await requireAdmin(req.headers.authorization);

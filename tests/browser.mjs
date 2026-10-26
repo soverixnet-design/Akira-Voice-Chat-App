@@ -24,47 +24,12 @@ try{
       assert.equal(await page.locator(`#v-${tab}`).isVisible(),true);
     }
     await page.locator('.card').first().click();
-    const room=page.frameLocator('#rf');
-    await room.locator('#rname').waitFor();
-    assert.equal((await room.locator('#app').boundingBox()).width,width);
-    const roomFrame=page.frames().find(f=>f.url().endsWith('/room.html'));
-    assert.equal(await roomFrame.evaluate(()=>document.documentElement.scrollWidth),width);
-    const name=await room.locator('#rname').textContent();
-    await room.locator('#mic').click();
-    const muted=await roomFrame.evaluate(()=>myMute);
-    await room.locator('#txt').fill('Akira viewport test');
-    await room.locator('#sendTxt').click();
-    await room.locator('#roomBtn').click();
-    await page.evaluate(()=>AkiraNavigation.back());
-    assert.equal(await room.locator('#bg').isVisible(),false);
-    // A second back minimizes; returning must reuse the same room document/state.
-    await page.evaluate(()=>AkiraNavigation.back());
-    assert.equal(await page.locator('#mini').isVisible(),true);
-    await page.locator('#minib').click();
-    assert.equal(await room.locator('#rname').textContent(),name);
-    assert.equal(await roomFrame.evaluate(()=>myMute),muted);
-    assert.ok((await room.locator('#chat').textContent()).includes('Akira viewport test'));
-    // Check input layout at a keyboard-sized viewport.
-    await page.setViewportSize({width,height:Math.max(320,height-300)});
-    await roomFrame.waitForFunction(h => Math.abs(document.getElementById('app').getBoundingClientRect().height-h)<2, Math.max(320,height-300));
-    const input=await room.locator('#txt').boundingBox();
-    assert.ok(input.width>0 && input.y+input.height<=Math.max(320,height-300));
-    await page.setViewportSize({width,height});
-    await roomFrame.waitForFunction(h => Math.abs(document.getElementById('app').getBoundingClientRect().height-h)<2, height);
-    if(width===390){
-      await page.screenshot({path:'test-results/room-390.png'});
-      // Simulate a notch and home indicator in the safe-area probe.
-      await page.locator('#safe-area-probe').evaluate(e=>{e.style.paddingTop='47px';e.style.paddingBottom='34px'});
-      await page.evaluate(()=>dispatchEvent(new Event('resize')));
-      await roomFrame.evaluate(()=>dispatchEvent(new Event('resize')));
-      const top=await room.locator('.top').boundingBox();
-      const dock=await room.locator('.dock').boundingBox();
-      assert.ok(top.y>=47);assert.equal(await room.locator('.dock').evaluate(e=>getComputedStyle(e).paddingBottom),'46px');
-      assert.ok(dock.y+dock.height<=height+1);
-    }
-    await room.locator('#exit').click();await room.locator('#y1').click();
-    assert.equal(await page.locator('#mini').isVisible(),false);
-    assert.equal(await page.evaluate(()=>AkiraBridge.getContext()),null);
+    // Guest mode is intentionally not allowed to join a live room.
+    // Verify the login gate rather than waiting for an unauthenticated room iframe.
+    await page.locator('#au.on').waitFor();
+    assert.equal(await page.locator('#rw.on').count(),0);
+    await page.evaluate(()=>hideAuth());
+    if(width===390)await page.screenshot({path:'test-results/home-390.png'});
     // Close thread before profile before recharge, then navigate home.
     await page.evaluate(()=>{go('me');rechargeSheet();openProfile({id:'123',n:'Test',e:'🙂'});openThread(['Test','🙂','Hi','Now']);openSheet('<h3>Test</h3>')});
     for(const id of ['shb','th','pfo','rcp']){
@@ -77,5 +42,208 @@ try{
     results.push({width,height,status:'passed'});console.log(`PASS ${width}x${height}`);
     await page.close();
   }
+
+  // Test the REAL web UI against a local simulated Akira API; never mutate production coins.
+  {
+    const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
+    const errors=[];
+    page.on('pageerror',err=>errors.push(err.message));
+    await page.addInitScript(()=>localStorage.setItem('akira_server_token_v1','A'.repeat(43)));
+    await page.route('https://api.soverixnet.online/**',async route=>{
+      const req=route.request(),path=new URL(req.url()).pathname;
+      const headers={'access-control-allow-origin':'http://127.0.0.1:4174','access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'authorization,content-type'};
+      if(req.method()==='OPTIONS')return route.fulfill({status:204,headers});
+      const payload=path==='/api/v1/wallet'?{wallet:{balance:6500}}:
+        path==='/api/v1/seller/wallet'?{wallet:{balance:20000,enabled:true}}:
+        path==='/api/v1/sellers'?{sellers:[{publicId:'100012',displayName:'Verified Seller',avatarUrl:null}]}:
+        path==='/api/v1/seller/history'?{transfers:[{recipientId:'100101',amount:100,createdAt:'2026-10-25T10:00:00Z'}]}:
+        path==='/api/v1/seller/transfer'?{balance:19900,recipientBalance:6600,duplicate:false}:
+        path==='/api/v1/rooms'?{rooms:[]}:{ok:true};
+      await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(payload)});
+    });
+    await page.goto('http://127.0.0.1:4174');
+    await page.locator('#sp.off').waitFor();
+    await page.locator('.ni[data-v="me"]').click();
+    await page.locator('#akiraSellerDirectoryButton').waitFor();
+    await page.waitForFunction(()=>window.coins()===6500);
+    await page.waitForFunction(()=>document.getElementById('akiraSellerOpen')?.style.display==='block');
+    assert.deepEqual(await page.locator('#v-me #wr, #v-me #akiraSellerDirectoryButton, #v-me #akiraSellerOpen').evaluateAll(nodes=>nodes.map(n=>n.id)),['wr','akiraSellerDirectoryButton','akiraSellerOpen']);
+    await page.locator('#akiraSellerDirectoryButton').click();
+    await page.getByText('Verified Seller',{exact:true}).waitFor();
+    assert.equal(await page.getByText('Rafi Coin Hub').count(),0);
+    await page.evaluate(()=>closeSheet());
+    await page.locator('#akiraSellerOpen').click();
+    await page.locator('#akiraSellerHistory').click();
+    await page.getByText(/100101/).waitFor();
+    await page.locator('#akiraSellerUser').fill('100101');
+    await page.locator('#akiraSellerAmount').fill('100');
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('#akiraSellerSend').click();
+    await page.getByText(/Success! Receiver balance/).waitFor();
+    await page.locator('#akiraSellerClose').click();
+    await page.evaluate(()=>rechargeSheet());
+    await page.locator('#rcp [data-p]').first().click();
+    await page.getByText(/not connected to the real wallet yet/).waitFor();
+    assert.deepEqual(errors,[]);
+    results.push({width:390,height:844,status:'seller_wallet_passed'});
+    await page.close();
+  }
+
+  // Connected admin interface: mocked authenticated API; no production admin operations.
+  {
+    const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
+    const errors=[],operations=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    await page.route('https://api.soverixnet.online/**',async route=>{
+      const req=route.request(),path=new URL(req.url()).pathname;
+      const headers={'access-control-allow-origin':'http://127.0.0.1:4174','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'GET, POST, OPTIONS'};
+      if(req.method()==='OPTIONS')return route.fulfill({status:204,headers});
+      const body=req.postDataJSON?.()||{};
+      operations.push({path,method:req.method(),body});
+      const payload=path==='/api/v1/auth/login'?{token:'A'.repeat(43)}:
+        path==='/api/v1/admin/dashboard'?{role:'super_admin',stats:{users:17,rooms:3}}:
+        path==='/api/v1/sellers'?{sellers:[{publicId:'100012',displayName:'Approved Seller'}]}:
+        path==='/api/v1/admin/sellers/status'?{ok:true,publicId:body.publicId,enabled:body.enabled}:
+        path==='/api/v1/admin/sellers/allocate'?{status:200,balance:300}:
+        path==='/api/v1/admin/wallet/recharge'?{ok:true,wallet:{balance:7800}}:
+        path==='/api/v1/admin/rooms/update'?{ok:true,room:{id:body.publicId,isLocked:body.locked,seatCount:body.seatCount||10}}:
+        path==='/api/v1/admin/game-status'?{enabled:true,games:[{name:'food-wheel',round:{id:'12',settledAt:null}},{name:'jackpot-fruit',round:null}]}:
+        path==='/api/v1/admin/users/search'?{user:{public_id:'100012',display_name:'Approved Seller',country_code:'BD'}}:
+        path==='/api/v1/admin/users'?{users:[]}:
+        path==='/api/v1/admin/roles'?{roles:[]}:
+        path==='/api/v1/admin/audit'?{events:[]}:
+        path==='/api/v1/rooms'?{rooms:[]}:{ok:true};
+      await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(payload)});
+    });
+    await page.goto('http://127.0.0.1:4174/admin.html');
+    await page.locator('input[type=email]').fill('admin@example.com');
+    await page.locator('input[type=password]').fill('not-a-real-password');
+    await page.getByRole('button',{name:'Sign In'}).click();
+    await page.getByRole('button',{name:'☰'}).click();
+    await page.locator('nav#nv [data-page="sellers"]').click();
+    const sellerCard=page.locator('section.card').filter({hasText:'Seller permissions'});
+    await sellerCard.getByRole('textbox',{name:'Seller 6-digit User ID'}).fill('100012');
+    page.once('dialog',dialog=>dialog.accept());
+    await sellerCard.getByRole('button',{name:'Disable seller'}).click();
+    await page.getByText('Seller disabled.').waitFor();
+    assert(operations.some(x=>x.path==='/api/v1/admin/sellers/status' && x.body.publicId==='100012' && x.body.enabled===false));
+    await page.getByRole('button',{name:'☰'}).click();
+    await page.locator('nav#nv [data-page="recharge"]').click();
+    const recharge=page.locator('section.card').filter({hasText:'Credit original user wallet'});
+    await recharge.locator('input').nth(0).fill('100012');
+    await recharge.locator('input').nth(1).fill('50');
+    page.once('dialog',dialog=>dialog.accept());
+    await recharge.getByRole('button',{name:'Credit wallet'}).click();
+    await page.getByText(/Wallet credited/).waitFor();
+    assert(operations.some(x=>x.path==='/api/v1/admin/wallet/recharge'&&x.body.publicId==='100012'&&x.body.amount===50));
+    await page.getByRole('button',{name:'☰'}).click();
+    await page.locator('nav#nv [data-page="rooms"]').click();
+    const rooms=page.locator('section.card').filter({hasText:'Manage Live Room'});
+    await rooms.getByRole('textbox',{name:'Room ID'}).fill('100014');
+    await rooms.getByLabel('Room access').selectOption('true');
+    await rooms.getByLabel('Seat count').selectOption('5');
+    page.once('dialog',dialog=>dialog.accept());
+    await rooms.getByRole('button',{name:'Save Room Settings'}).click();
+    await page.getByText(/Saved room 100014/).waitFor();
+    assert(operations.some(x=>x.path==='/api/v1/admin/rooms/update' && x.body.publicId==='100014' && x.body.locked===true && x.body.seatCount===5));
+    await page.getByRole('button',{name:'☰'}).click();
+    await page.locator('nav#nv [data-page="games"]').click();
+    await page.getByText('Live Game Engine — Read Only').waitFor();
+    await page.getByText('Settlement engine').waitFor();
+    assert(operations.some(x=>x.path==='/api/v1/admin/game-status'));
+    assert.deepEqual(errors,[]);
+    results.push({width:390,height:844,status:'admin_connected_passed'});
+    console.log('PASS connected admin controls at 390x844');
+    await page.close();
+  }
+
+  // Verify the real room-seat adapter uses authenticated server state, not demo occupants.
+  {
+    const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
+    const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    let taken=false;
+    await page.route('https://api.soverixnet.online/**',async route=>{
+      const request=route.request(),path=new URL(request.url()).pathname;
+      const headers={'access-control-allow-origin':'http://127.0.0.1:4174',
+        'access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'authorization,content-type'};
+      if(request.method()==='OPTIONS')return route.fulfill({status:204,headers});
+      if(path==='/api/v1/rooms/100001/seat'&&request.method()==='POST')taken=true;
+      const state={ok:true,roomId:'100001',seatCount:10,ownerId:'1',name:'Live Test Room',themeKey:'ocean',
+        seats:taken?[{seatNo:1,publicId:'100002',displayName:'My Real ID'}]:[],
+        members:[{publicId:'100002',displayName:'My Real ID'}]};
+      return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(state)});
+    });
+    await page.goto('http://127.0.0.1:4174/room.html');
+    await page.evaluate(()=>{
+      AkiraBridge.setContext({id:'100001',ownerId:'100001',userId:'100002',name:'Live Test Room',
+        voiceApi:'https://api.soverixnet.online',voiceAuth:'A'.repeat(43)});
+    });
+    await page.addScriptTag({url:'http://127.0.0.1:4174/src/room-live.js'});
+    await page.waitForFunction(()=>window.__akiraLiveRoomSeats===true);
+    assert.equal(await page.locator('.seat').count(),10);
+    assert.equal(await page.locator('.seat').filter({hasText:'Rafi'}).count(),0);
+    await page.locator('.seat[data-i="1"]').click();
+    await page.locator('#akiraTakeSeat').click();
+    await page.locator('.seat[data-i="1"]').getByText('My Real ID').waitFor();
+    assert.equal(taken,true);
+    assert.equal(await page.locator('#mic').getAttribute('aria-label'),'Mute or unmute');
+    assert.deepEqual(errors,[]);
+    results.push({width:390,height:844,status:'live_room_seats_passed'});
+    console.log('PASS database-backed voice seats at 390x844');
+    await page.close();
+  }
+
+  // Dedicated Akira finance page: protected original Wallet and Seller inventory UI, all mocked.
+  {
+    const page=await browser.newPage({viewport:{width:390,height:844},reducedMotion:'reduce'});
+    const errors=[],operations=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    await page.route('https://api.soverixnet.online/**',async route=>{
+      const req=route.request(),path=new URL(req.url()).pathname;
+      const headers={'access-control-allow-origin':'http://127.0.0.1:4174',
+        'access-control-allow-methods':'GET, POST, OPTIONS',
+        'access-control-allow-headers':'authorization,content-type'};
+      if(req.method()==='OPTIONS')return route.fulfill({status:204,headers});
+      const body=req.postDataJSON?.()||{};
+      operations.push({path,method:req.method(),body});
+      const result=path==='/api/v1/auth/login'?{token:'A'.repeat(43)}:
+        path==='/api/v1/admin/dashboard'?{role:'super_admin',stats:{users:15,rooms:2}}:
+        path==='/api/v1/admin/users/search'?{user:{public_id:100012,display_name:'Verified Receiver',country_code:'BD'}}:
+        path==='/api/v1/sellers'?{sellers:[{publicId:'100012',displayName:'Verified Receiver'}]}:
+        path==='/api/v1/admin/wallet/recharge'?{ok:true,wallet:{balance:7800}}:
+        path==='/api/v1/admin/sellers/allocate'?{ok:true,balance:5000}:
+        path==='/api/v1/admin/sellers/status'?{ok:true,enabled:body.enabled}:
+        {ok:true};
+      await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(result)});
+    });
+    await page.goto('http://127.0.0.1:4174/admin-finance.html');
+    await page.locator('#email').fill('admin@example.com');
+    await page.locator('#password').fill('test-password');
+    await page.locator('#loginBtn').click();
+    await page.locator('#financePanel:not(.hidden)').waitFor();
+    await page.locator('#rechargeId').fill('100012');
+    await page.locator('#rechargeAmount').fill('100');
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('#rechargeButton').click();
+    await page.getByText(/Original Wallet: 7,800/).waitFor();
+    await page.locator('#sellerId').fill('100012');
+    await page.locator('#sellerAmount').fill('500');
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('#allocateButton').click();
+    await page.getByText(/Seller Balance: 5,000/).waitFor();
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('#disableButton').click();
+    await page.getByText(/Seller disabled/).waitFor();
+    assert(operations.some(x=>x.path==='/api/v1/admin/wallet/recharge'&&x.body.publicId==='100012'&&x.body.amount===100&&x.body.requestId));
+    assert(operations.some(x=>x.path==='/api/v1/admin/sellers/allocate'&&x.body.publicId==='100012'&&x.body.amount===500&&x.body.requestId));
+    assert(operations.some(x=>x.path==='/api/v1/admin/sellers/status'&&x.body.enabled===false));
+    assert.deepEqual(errors,[]);
+    await page.locator('#logout').click();
+    await page.locator('#loginPanel:not(.hidden)').waitFor();
+    results.push({width:390,height:844,status:'admin_finance_passed'});
+    console.log('PASS Admin Finance recharge, seller allocation, permission and logout');
+    await page.close();
+  }
+
   await writeFile('test-results/browser.json',JSON.stringify(results,null,2));
 }finally{await browser.close();server.kill()}

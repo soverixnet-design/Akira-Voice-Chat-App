@@ -184,6 +184,8 @@ try{
       AkiraBridge.setContext({id:'100001',ownerId:'100001',userId:'100002',name:'Live Test Room',
         voiceApi:'https://api.soverixnet.online',voiceAuth:'A'.repeat(43)});
     });
+    // CI has no physical mic. Only permission is mocked, not server seat ownership.
+    await page.evaluate(()=>{window.akiraEnsureMicPermission=async()=>true});
     await page.addScriptTag({url:'http://127.0.0.1:4174/src/room-live.js'});
     await page.waitForFunction(()=>window.__akiraLiveRoomSeats===true);
     assert.equal(await page.locator('.seat').count(),10);

@@ -9,6 +9,8 @@ STAMP="$(date -u +%Y%m%d-%H%M%S)"
 BACKUP="$ROOT/backups/admin-finance-$STAMP"
 TMP="$(mktemp)"
 declare -a MODIFIED=()
+INSTALLING=0
+COMPLETE=0
 cleanup() { rm -f -- "$TMP"; }
 rollback(){
   echo "Finance page verification failed; restoring previous admin files." >&2
@@ -20,7 +22,16 @@ rollback(){
     fi
   done
 }
-trap cleanup EXIT
+on_exit(){
+  local code=$?
+  trap - EXIT
+  if [[ "$code" -ne 0 && "$INSTALLING" == 1 && "$COMPLETE" == 0 ]]; then
+    rollback || true
+  fi
+  cleanup
+  exit "$code"
+}
+trap on_exit EXIT
 [[ -d "$ROOT/.git" && -f "$ROOT/server/src/admin.html" && -d "$ROOT/web" ]] ||
   { echo 'Cannot find Akira server. No changes made.' >&2; exit 1; }
 echo '=== CHECK FINANCE ENDPOINTS SAFELY (NO TOKEN, NO COIN CHANGES) ==='
@@ -49,6 +60,7 @@ for f in web/admin-finance.html dist/admin-finance.html server/src/admin.html we
   mkdir -p "$BACKUP/files/$(dirname "$f")"
   if [[ -f "$ROOT/$f" ]]; then cp -a "$ROOT/$f" "$BACKUP/files/$f"; fi
 done
+INSTALLING=1
 install -m 0644 "$TMP" "$ROOT/web/admin-finance.html"
 if [[ -d "$ROOT/dist" ]]; then install -m 0644 "$TMP" "$ROOT/dist/admin-finance.html"; fi
 # Add one small finance link, leaving every existing admin component and handler intact.
@@ -73,11 +85,11 @@ CHECK="$(mktemp)"
 if ! curl --fail --silent --show-error --max-time 15 "$BASE/app/admin-finance.html" -o "$CHECK" ||
    ! grep -q 'Akira Wallet Recharge & Coin Seller Management' "$CHECK"; then
   rm -f "$CHECK"
-  rollback
   echo 'The server did not serve the new page from /app; no live coin data changed.' >&2
   exit 1
 fi
 rm -f "$CHECK"
+COMPLETE=1
 echo 'FINANCE PANEL INSTALLED; USER DATA AND WALLET BALANCES UNCHANGED.'
 echo "Open: $BASE/app/admin-finance.html"
 echo 'Open the existing /admin page to find Wallet Recharge / Coin Sellers button.'

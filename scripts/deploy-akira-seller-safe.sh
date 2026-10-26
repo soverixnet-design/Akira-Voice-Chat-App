@@ -22,8 +22,8 @@ FILES=(server/package.json server/src/server.mjs server/src/seller-wallet.mjs se
   server/migrations/011_room_seats.sql server/migrations/012_deletion_requests.sql
   server/migrations/013_user_safety.sql server/migrations/014_daily_rewards.sql
   server/src/game-bets.mjs web/src/seller-panel.js web/src/seller-directory.js
-  web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/game-overlay.js
-  web/src/room.js web/src/room-live.js
+  web/src/wallet-sync.js web/src/wallet-safety.js web/src/account-deletion-ui.js web/src/release-info.js web/src/game-overlay.js
+  web/src/room.js web/src/room-live.js web/src/release-info.js
   web/game-live.html web/admin-connected.html web/admin-legacy.html web/delete-account.html)
 SAVE=("${FILES[@]}" web/index.html web/room.html web/admin.html server/compose.yaml)
 
@@ -254,7 +254,8 @@ scripts=[('src/app.js','src/game-overlay.js'),
  ('src/seller-panel.js','src/seller-directory.js'),
  ('src/profile-app.js','src/wallet-sync.js'),
  ('src/wallet-sync.js','src/wallet-safety.js'),
- ('src/wallet-safety.js','src/account-deletion-ui.js')]
+ ('src/wallet-safety.js','src/account-deletion-ui.js'),
+ ('src/account-deletion-ui.js','src/release-info.js')]
 for anchor,addon in scripts:
     if f'src="{addon}"' in s: continue
     a=f'<script src="{anchor}"></script>'

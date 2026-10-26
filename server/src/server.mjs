@@ -13,6 +13,7 @@ import { createRoom, joinRoom, leaveRoom } from './rooms.mjs';
 import {roomSeats,setSeat,updateRoomSettings} from './room-seats.mjs';
 import {deletionRequestStatus,submitDeletionRequest} from './account-deletion.mjs';
 import {dailyRewardStatus,claimDailyReward} from './daily-rewards.mjs';
+import {googleClientId,googleSignIn,linkGoogleAccount} from './google-auth.mjs';
 import { pathToFileURL } from 'node:url';
 
 const port = Number(process.env.PORT || 4301);
@@ -47,6 +48,27 @@ export const requestHandler = async (req, res) => {
       'access-control-max-age': '600',
     });
     return res.end();
+  }
+  if(req.method==='GET'&&url.pathname==='/api/v1/auth/google/config'){
+    const clientId=googleClientId();
+    return send(200,{enabled:!!clientId,clientId});
+  }
+  if(url.pathname==='/api/v1/auth/google' || url.pathname==='/api/v1/auth/google/link'){
+    if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+    try{
+      const linking=url.pathname.endsWith('/link');
+      let user=null;
+      if(linking){
+        user=await authenticate(req.headers.authorization);
+        if(!user)return send(401,{error:'unauthorized'});
+      }
+      let raw='';
+      for await(const chunk of req){raw+=chunk;if(raw.length>10000)return send(413,{error:'payload_too_large'})}
+      let body;try{body=JSON.parse(raw)}catch{return send(400,{error:'invalid_json'})}
+      if(typeof body?.idToken!=='string'||body.idToken.length>8192)return send(400,{error:'invalid_google_credential'});
+      const result=linking?await linkGoogleAccount(user,body.idToken):await googleSignIn(body.idToken);
+      return send(result.status,result.body);
+    }catch(err){console.error('google_sign_in_failed',err.code||err.message);return send(503,{error:'google_login_unavailable'})}
   }
   if (req.method === 'POST' && ['/api/v1/auth/register','/api/v1/auth/login'].includes(url.pathname)) {
     try {

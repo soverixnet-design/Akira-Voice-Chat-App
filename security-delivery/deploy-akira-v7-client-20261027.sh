@@ -22,7 +22,7 @@ curl -fsS --max-time 8 http://127.0.0.1:4301/health | grep -Fq '"ok":true' || { 
 
 echo 'Fetching pinned, CI-tested V7 client source into a separate staging area...'
 git fetch --no-tags origin "$BRANCH"
-[[ "$(git rev-parse FETCH_HEAD)" == "$REF" ]] || { echo 'Git branch moved after verification. Stopped.' >&2; exit 2; }
+git merge-base --is-ancestor "$REF" FETCH_HEAD || { echo 'Verified V7 revision is not in the fetched branch. Stopped.' >&2; exit 2; }
 mkdir -p "$APP/security-backups"
 STAGE=$(mktemp -d "$APP/security-backups/.v7-client-stage.XXXXXX")
 BACKUP=''

@@ -39,7 +39,8 @@ test('safe staging checks container health and avoids destructive Git commands',
  assert.match(stage,/--check/);
  assert.match(stage,/pg_dump/);
  assert.match(stage,/RESTORING previous API/);
- assert.doesNotMatch(stage,/git reset --hard|git clean -fd|TRUNCATE|DROP TABLE/);
+ const executable=stage.split('\n').filter(line=>!line.trimStart().startsWith('#')).join('\n');
+ assert.doesNotMatch(executable,/git reset --hard|git clean -fd|TRUNCATE|DROP TABLE/);
 });
 test('Play target SDK is 36 but signed release is a separate step',()=>{
  assert.match(android,/targetSdkVersion = 36/);

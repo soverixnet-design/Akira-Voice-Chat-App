@@ -66,18 +66,34 @@ git -C "$ROOT" fetch origin "$BRANCH"
 git -C "$ROOT" worktree add --detach "$REVIEW" FETCH_HEAD
 echo "Review commit: $(git -C "$REVIEW" rev-parse HEAD)"
 echo '=== GUARD EXISTING USER CUSTOMIZATIONS ==='
+conflicts=0
 for f in "${FILES[@]}"; do
-  [[ -f "$REVIEW/$f" ]] || { echo "Missing candidate $f"; exit 1; }
+  [[ -f "$REVIEW/$f" ]] || { echo "ERROR: Missing candidate $f"; conflicts=$((conflicts+1)); continue; }
   if [[ -e "$ROOT/$f" ]]; then
-    git -C "$ROOT" ls-files --error-unmatch "$f" >/dev/null 2>&1 ||
-      { echo "CONFLICT: untracked live $f. Nothing changed."; exit 1; }
-    git -C "$ROOT" diff --quiet HEAD -- "$f" ||
-      { echo "CONFLICT: locally modified $f. Nothing changed."; exit 1; }
+    # The prior successful guarded release may already have installed this exact
+    # candidate file. Git status will still call it 'modified' versus old HEAD.
+    if cmp -s "$ROOT/$f" "$REVIEW/$f"; then
+      echo "ALREADY MATCHES CANDIDATE: $f"
+      continue
+    fi
+    if ! git -C "$ROOT" ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+      echo "CONFLICT: Untracked live file differs from candidate: $f"
+      conflicts=$((conflicts+1))
+    elif ! git -C "$ROOT" diff --quiet HEAD -- "$f"; then
+      echo "CONFLICT: Locally modified file differs from candidate: $f"
+      conflicts=$((conflicts+1))
+    fi
   elif git -C "$ROOT" ls-files --error-unmatch "$f" >/dev/null 2>&1; then
-    echo "CONFLICT: tracked file locally deleted: $f"
-    exit 1
+    echo "CONFLICT: Tracked file locally deleted: $f"
+    conflicts=$((conflicts+1))
   fi
 done
+if ((conflicts)); then
+  echo "STOP: $conflicts file conflict(s). This is deliberate: no file or coin changes." >&2
+  echo "For each modified tracked file run: git -C $ROOT diff -- path/to/file" >&2
+  echo "Never use git reset --hard or git clean to fix these conflicts." >&2
+  exit 1
+fi
 [[ -f "$ROOT/web/index.html" ]] || { echo 'Missing original index.html'; exit 1; }
 echo '=== CANDIDATE TESTS ==='
 (cd "$REVIEW/server" && npm install --ignore-scripts --no-audit --no-fund && npm test)

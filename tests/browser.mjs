@@ -84,7 +84,7 @@ try{
     await page.locator('#akiraSellerSend').click();
     await page.getByText(/Success! Receiver balance/).waitFor();
     await page.locator('#akiraSellerClose').click();
-    await page.evaluate(()=>rechargeSheet());
+    await page.evaluate(()=>rechargeSheet(1));
     await page.locator('#av7wallet').waitFor();
     await page.getByText('Exact balance: 6,500').waitFor();
     await page.getByText(/100 diamonds → 70 coins/).waitFor();

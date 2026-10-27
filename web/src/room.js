@@ -59,8 +59,20 @@ async function akiraStartVoice(){
     });
     await room.connect(data.url,data.token);
     akiraVoiceRoom=room;
-    await room.localParticipant.setMicrophoneEnabled(Boolean(window.__akiraVoiceSeatActive && !myMute));
+    var shouldTalk=Boolean(window.__akiraVoiceSeatActive && !myMute);
+    try{
+      if(shouldTalk&&typeof window.akiraEnsureMicPermission==="function"){
+        var granted=await window.akiraEnsureMicPermission();
+        if(!granted)throw Error("microphone_permission_denied");
+      }
+      await room.localParticipant.setMicrophoneEnabled(shouldTalk);
+    }catch(micError){
+      myMute=true;
+      room.localParticipant.setMicrophoneEnabled(false).catch(function(){});
+      toast("Microphone permission needed; listening is still active");
+    }
     akiraVoiceReady=true;
+    window.dispatchEvent(new Event("akira:voice-connected"));
     toast("Live voice connected");
   }catch(err){toast("Voice: "+(err.message||"connection failed"))}
   finally{akiraVoiceConnecting=false}

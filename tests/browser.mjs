@@ -219,7 +219,7 @@ try{
     // Real gift recipients include the signed-in user only when server policy allows.
     await page.addScriptTag({url:'http://127.0.0.1:4174/src/room-v6-giftbox.js'});
     await page.locator('#bGift').click();
-    await page.getByText('My Real ID',{exact:true}).last().waitFor();
+    await page.locator('#sheet [data-guser="100002"]').waitFor();
     await page.getByText('Verified Rose',{exact:true}).waitFor();
     assert.deepEqual(errors,[]);
     results.push({width:390,height:844,status:'live_room_seats_passed'});

@@ -84,7 +84,7 @@ function loginPage(){token='';role='';root.innerHTML='';const screen=el('div','l
 function renderShell(){root.innerHTML='';const shell=el('div','app');shell.id='shell';const nav=el('nav');nav.id='nv';const brand=el('div','br');const logo=el('div','brand-icon','✦');const label=el('div');label.append(el('b','','Akira'),el('small','','Admin Control Center'));brand.append(logo,label);nav.appendChild(brand);let section='';for(const [group,key,title] of pages){if(group!==section){nav.appendChild(el('div','nav-section',group));section=group}const a=el('a','',title);a.href='#'+key;a.dataset.page=key;a.onclick=e=>{e.preventDefault();render(key);shell.classList.remove('menu-open')};nav.appendChild(a)}
  const main=el('main');const top=el('div','top');top.append(button('☰',()=>shell.classList.toggle('menu-open'),'btn o s'));const heading=el('h2');heading.id='heading';top.appendChild(heading);top.appendChild(el('div','sp'));top.appendChild(el('div','who','Role: '+role));top.append(button('Log out',async()=>{try{await call('/api/v1/auth/logout',{method:'POST'})}catch{}loginPage()},'btn o s'));main.append(top,el('div'));main.lastChild.id='pg';shell.append(nav,main);root.appendChild(shell)
 }
-async function render(page,initial){currentPage=page;document.querySelectorAll('[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));const entry=pages.find(p=>p[1]===page);$('#heading').textContent=entry?.[2]||'Admin';$('#pg').replaceChildren();try{switch(page){case 'dash':await dashPage(initial);break;case 'users':await usersPage();break;case 'sellers':await sellersPage();break;case 'recharge':await rechargePage();break;case 'roles':await rolesPage();break;case 'audit':await auditPage();break;case 'reports':await reportsPage();break;case 'deletion':await deletionPage();break;case 'rooms':await roomsPage();break;case 'games':await gamesPage();break;default:plannedPage()}}catch(err){notice('Unable to load this section: '+err.message)}}
+async function render(page,initial){currentPage=page;document.querySelectorAll('[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));const entry=pages.find(p=>p[1]===page);$('#heading').textContent=entry?.[2]||'Admin';$('#pg').replaceChildren();try{switch(page){case 'dash':await dashPage(initial);break;case 'users':await usersPage();break;case 'sellers':await sellersPage();break;case 'recharge':await rechargePage();break;case 'roles':await rolesPage();break;case 'audit':await auditPage();break;case 'reports':await reportsPage();break;case 'deletion':await deletionPage();break;case 'rooms':await roomsPage();break;case 'games':await gamesPage();break;case 'gifts':await giftPolicyPage();break;case 'settings':await giftPolicyPage();break;case 'store':await catalogPage();break;default:plannedPage()}}catch(err){notice('Unable to load this section: '+err.message)}}
 async function dashPage(initial){const data=initial||await call('/api/v1/admin/dashboard');const stats=data.stats||{};const c=card('Live Database Statistics');line(c,'Registered users',stats.users);line(c,'Rooms',stats.rooms);line(c,'Signed-in role',data.role);notice('Only verified API values are displayed. Online users, revenue and game metrics require additional backend endpoints.');const actions=card('Quick Actions');actions.append(button('Find user',()=>render('users')),button('Coin sellers',()=>render('sellers')),button('Wallet recharge',()=>render('recharge')))}
 async function usersPage(){const c=card('Find account by 6-digit ID');const fields=el('div','fields');const uid=input(fields,'User ID','100001');const actions=el('div','controls');const result=el('div');actions.append(button('Search user',async()=>{result.replaceChildren();if(!checkId(uid.value)){result.textContent='Enter a valid 6-digit ID';return}try{const d=await call('/api/v1/admin/users/search?id='+encodeURIComponent(uid.value.trim()));if(!d.user){result.textContent='User not found';return}line(result,'ID',d.user.public_id);line(result,'Name',d.user.display_name);line(result,'Country',d.user.country_code||'-')}catch(e){result.textContent=e.message}}));
  actions.append(button('Recent users',async()=>{result.replaceChildren();try{const d=await call('/api/v1/admin/users');for(const u of d.users||[])line(result,(u.display_name||'User')+' · '+u.public_id,u.country_code||'—')}catch(e){result.textContent=e.message}},'btn o s'));c.append(fields,actions,result);
@@ -161,6 +161,67 @@ async function roomsPage(){
   finally{save.disabled=false}
  });
  c.appendChild(save);
+}
+async function giftPolicyPage(){
+ const policy=await call('/api/v1/control/gift-policy');
+ const panel=card('Gift permissions · real server settings');
+ panel.appendChild(el('p','subtle','These switches control all authenticated Akira users. Both use the original coin wallet. Self gifts may affect ranks, so review abuse before enabling.'));
+ const control=el('div','fields'),own=el('label'),others=el('label');
+ const ownCheck=el('input');ownCheck.type='checkbox';ownCheck.checked=policy.allowSelfGifts===true;
+ own.append(ownCheck,document.createTextNode(' Allow gifts to own ID'));
+ const otherCheck=el('input');otherCheck.type='checkbox';otherCheck.checked=policy.allowOtherGifts===true;
+ others.append(otherCheck,document.createTextNode(' Allow gifts to other users'));
+ control.append(own,others);panel.append(control);
+ const status=el('p','status');panel.append(status);
+ if(role==='super_admin'){
+   panel.appendChild(button('Save Gift Permissions',async()=>{
+     if(!confirm('Update gift permissions for all users?'))return;
+     status.textContent='Saving…';
+     try{await post('/api/v1/control/gift-policy',{allowSelfGifts:ownCheck.checked,allowOtherGifts:otherCheck.checked});status.textContent='Gift permissions updated on server.'}
+     catch(e){status.textContent='Unable to update: '+e.message}
+   },'btn p'));
+ }else panel.appendChild(el('p','subtle','Only Super Admin can change gift permission switches.'));
+ await catalogPage();
+}
+async function catalogPage(){
+ const result=await call('/api/v1/control/catalog');
+ const catalog=Array.isArray(result.items)?result.items:[];
+ const panel=card('Real Gift · Frame · Entry Catalogue');
+ panel.appendChild(el('p','subtle','Manage real Akira items, including imported original Sovera frames and entries. Upload images to a trusted HTTPS URL then set the URL here.'));
+ const form=el('div','fields');
+ const kindLabel=el('label');kindLabel.textContent='Item type';
+ const kind=el('select');for(const k of ['gift','frame','entry','theme','medal','vip']){const o=el('option');o.value=k;o.textContent=k;kind.append(o)}kindLabel.append(kind);form.append(kindLabel);
+ const id=input(form,'Existing item ID (blank to create)','Optional ID');
+ const name=input(form,'Name','e.g. Royal Gold');
+ const asset=input(form,'Artwork URL or emoji','https://...');
+ const description=input(form,'Description','Original Sovera artwork');
+ const price=input(form,'Coin price','0','number');price.value='0';
+ const enabledLabel=el('label');const enabled=el('input');enabled.type='checkbox';enabled.checked=true;enabledLabel.append(enabled,document.createTextNode(' Available to users'));form.append(enabledLabel);
+ panel.append(form);
+ const msg=el('p','status');panel.append(msg);
+ panel.append(button('Save Catalogue Item',async()=>{
+   const value=Number(price.value);
+   if(!name.value.trim()||!Number.isSafeInteger(value)||value<0){msg.textContent='Enter an item name and valid non-negative coin price.';return}
+   if(id.value.trim()&&!/^\d{1,18}$/.test(id.value.trim())){msg.textContent='Invalid item ID.';return}
+   if(!confirm('Save this real catalogue item?'))return;
+   try{
+     const item={kind:kind.value,name:name.value.trim(),description:description.value.trim(),asset:asset.value.trim(),price:value,enabled:enabled.checked};
+     if(id.value.trim())item.id=id.value.trim();
+     await post('/api/v1/control/catalog',item);msg.textContent='Saved. Reopen catalogue to refresh item list.';
+   }catch(e){msg.textContent='Save failed: '+e.message}
+ },'btn p'));
+ const list=card('Published Catalogue · newest 50');
+ if(!catalog.length)list.appendChild(el('p','subtle','No items available. Import the Sovera seed before users can select frames.'));
+ for(const item of catalog){
+   const row=el('div','rowline'),details=el('div');
+   details.append(el('strong','',item.kind+' · '+item.name),el('div','subtle','ID '+item.id+' · 🪙 '+item.price+' · '+(item.enabled?'enabled':'disabled')));
+   row.append(details,button('Edit',()=>{
+     id.value=String(item.id);kind.value=item.kind;name.value=item.name;description.value=item.description||'';
+     asset.value=item.asset||'';price.value=String(item.price);enabled.checked=!!item.enabled;
+     panel.scrollIntoView({behavior:'smooth'});
+   },'btn o s'));
+   list.append(row);
+ }
 }
 async function gamesPage(){
  const result=await call('/api/v1/admin/game-status');

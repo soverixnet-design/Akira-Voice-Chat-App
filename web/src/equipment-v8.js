@@ -104,8 +104,38 @@
       const sh=document.getElementById('sh');if(sh)sh.innerHTML='<h3>Avatar Items</h3><p class="lbl">'+esc(e.message||'Service unavailable')+'</p>';
     }
   }
-  window.akiraEquipment={open,refresh,decorate:()=>{if(loaded)apply()}};
+  const entryDurations={
+    'phoenix-entry.webp':3200,'dragon-queen-entry.webp':3200,
+    'ice-king-entry.webp':3200,'castle-entry.webp':7000,
+    'lion-queen-entry.webp':10600,'phoenix-queen-entry.webp':13800,
+    'tiger-queen-entry.webp':12000
+  };
+  function showEntry(preview=false){
+    if(window.__akiraAuthVerified!==true||!loaded)return;
+    const equipped=selected('entry');
+    if(!equipped)return;
+    const url=imageUrl(equipped.asset);if(!url)return;
+    document.getElementById('akira-v8-room-entry')?.remove();
+    const file=url.split('/').pop().split('?')[0],duration=entryDurations[file]||3200;
+    const entry=document.createElement('div');
+    entry.id='akira-v8-room-entry';
+    entry.setAttribute('role','status');
+    entry.setAttribute('aria-label','Voice room entrance animation');
+    const visual=document.createElement('img');
+    visual.src=url;visual.alt=equipped.name||'Room entrance';
+    visual.className='akira-v8-entry-art';
+    visual.style.animationDuration=duration+'ms';
+    entry.appendChild(visual);
+    const close=document.createElement('button');close.type='button';
+    close.className='akira-v8-entry-close';close.textContent='✕';close.title='Close entry';
+    close.onclick=()=>entry.remove();entry.appendChild(close);
+    document.body.appendChild(entry);
+    const removal=setTimeout(()=>entry.remove(),duration);
+    close.addEventListener('click',()=>clearTimeout(removal),{once:true});
+  }
+  window.akiraEquipment={open,refresh,showEntry,decorate:()=>{if(loaded)apply()}};
+
   const style=document.createElement('style');
-  style.textContent='.akira-v8-categories{display:flex;gap:8px;margin:8px 0 14px}.akira-v8-categories button{flex:1;padding:11px;border:1px solid #6d4ae5;border-radius:12px;color:white;background:#241747}.akira-v8-categories .on{background:linear-gradient(135deg,#7c3aed,#d946ef)}.akira-v8-items{display:grid;gap:9px;max-height:45vh;overflow:auto}.akira-v8-item{display:flex;align-items:center;gap:12px;padding:10px;border:1px solid #ffffff30;border-radius:14px;background:#ffffff13}.akira-v8-icon{width:54px;height:54px;object-fit:contain;display:grid;place-items:center;font-size:34px}.akira-v8-item-text{flex:1;min-width:0}.akira-v8-item-text b,.akira-v8-item-text small{display:block}.akira-v8-item-text small{opacity:.7}.akira-v8-item button{border:0;border-radius:9px;padding:10px;background:#a855f7;color:white}.akira-v8-item button:disabled{opacity:.6}.akira-v8-frame-host{position:relative!important}.akira-v8-frame{position:absolute!important;object-fit:contain!important;pointer-events:none!important;z-index:6!important;animation:akira-v8-appear 3s ease-in-out 1}.akira-v8-frame-host .lvbadge{z-index:7}@keyframes akira-v8-appear{0%{filter:brightness(1)}50%{filter:brightness(1.55)}100%{filter:brightness(1)}}';
+  style.textContent='.akira-v8-categories{display:flex;gap:8px;margin:8px 0 14px}.akira-v8-categories button{flex:1;padding:11px;border:1px solid #6d4ae5;border-radius:12px;color:white;background:#241747}.akira-v8-categories .on{background:linear-gradient(135deg,#7c3aed,#d946ef)}.akira-v8-items{display:grid;gap:9px;max-height:45vh;overflow:auto}.akira-v8-item{display:flex;align-items:center;gap:12px;padding:10px;border:1px solid #ffffff30;border-radius:14px;background:#ffffff13}.akira-v8-icon{width:54px;height:54px;object-fit:contain;display:grid;place-items:center;font-size:34px}.akira-v8-item-text{flex:1;min-width:0}.akira-v8-item-text b,.akira-v8-item-text small{display:block}.akira-v8-item-text small{opacity:.7}.akira-v8-item button{border:0;border-radius:9px;padding:10px;background:#a855f7;color:white}.akira-v8-item button:disabled{opacity:.6}.akira-v8-frame-host{position:relative!important}.akira-v8-frame{position:absolute!important;object-fit:contain!important;pointer-events:none!important;z-index:6!important;animation:akira-v8-appear 3s ease-in-out 1}.akira-v8-frame-host .lvbadge{z-index:7}@keyframes akira-v8-appear{0%{filter:brightness(1)}50%{filter:brightness(1.55)}100%{filter:brightness(1)}}#akira-v8-room-entry{position:fixed;inset:0;display:grid;place-items:center;z-index:10003;pointer-events:none;background:linear-gradient(0deg,transparent,#0003)}.akira-v8-entry-art{width:min(100vw,500px);height:100dvh;object-fit:contain;animation:akira-v8-arrive 3.2s ease-out forwards}.akira-v8-entry-close{position:absolute;right:20px;top:42px;border:1px solid #fff8;color:white;border-radius:50%;width:36px;height:36px;background:#0008;pointer-events:auto}@keyframes akira-v8-arrive{0%{opacity:0;transform:translateY(24px) scale(.95);filter:brightness(1.8)}18%{opacity:1;transform:translateY(0) scale(1)}77%{opacity:1;filter:brightness(1)}100%{opacity:0}}@media(prefers-reduced-motion:reduce){.akira-v8-entry-art{animation:none!important;opacity:1}}';
   document.head.appendChild(style);
 })();

@@ -239,8 +239,16 @@ export const requestHandler = async (req, res) => {
         for(const item of amounts){totals[item.item_id]=item.total;myBets[item.item_id]=item.mine}
         players=people[0]?.players||0;
       }
+      let previousMyResult={bet:'0',win:'0'};
+      if(rows[1] && rows[1].result && rows[1].settledAt){
+        const {rows:paid}=await pool.query(
+          `SELECT COALESCE(SUM(amount),0)::text AS bet,COALESCE(SUM(payout),0)::text AS win FROM ${betsTable} WHERE round_id=$1 AND user_id=$2`,
+          [rows[1].id,user.id]
+        );
+        previousMyResult=paid[0]||previousMyResult;
+      }
       return send(200,{game,round:rows[0]||null,previousRound:rows[1]||null,
-        serverTime:new Date().toISOString(),bettingEnabled:engineOn&&gameEnabled,
+        previousMyResult,serverTime:new Date().toISOString(),bettingEnabled:engineOn&&gameEnabled,
         reason:!engineOn?'game_engine_disabled':!gameEnabled?'game_disabled':null,
         totals,myBets,players});
     }catch(err){console.error('round_read_failed',err.message);return send(503,{error:'round_unavailable'});}

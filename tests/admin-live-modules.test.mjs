@@ -57,6 +57,9 @@ test('server-verified tasks credit real wallet once and use current daily reward
   assert.match(app,/appendVerifiedDailyTasks\(token\)/);
   assert.match(app,/api\/v1\/community\/tasks\/claim/);
   assert.match(app,/result\.duplicate/);
+  assert.match(app,/loadAdminPublishedContent\(\)/);
+  assert.match(app,/api\/v1\/community\/content/);
+  assert.match(app,/akiraOfficialNotices/);
 });
 
 test('new Admin schema adds tables without destroying existing accounts or coins',()=>{

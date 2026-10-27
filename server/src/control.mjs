@@ -96,6 +96,16 @@ export async function controlRoutes(req,url,send){
   else{a=await requireAdmin(req.headers.authorization);if(a.error)throw fail(a.error,a.status);user=a.user;}
   const section=path.split('/').at(-1);
   if(publicPath){
+   if(req.method==='GET'&&section==='user-cosmetics'){
+    const id=url.searchParams.get('id')||'';
+    if(!ident(id))throw fail('invalid_user_id');
+    const {rows}=await db.query(`SELECT c.kind,c.name,c.asset FROM akira_control_inventory i
+      JOIN akira_users u ON u.id=i.user_id
+      JOIN akira_control_catalog c ON c.id=i.item_id
+      WHERE u.public_id=$1 AND u.is_banned=false AND i.equipped=true
+        AND c.enabled=true AND c.kind IN ('frame','entry') ORDER BY c.id DESC`,[id]);
+    send(200,{id,items:rows});return true;
+   }
    if(req.method==='GET'&&section==='gift-policy'){
     const {rows}=await db.query('SELECT allow_self_gifts,allow_other_gifts FROM akira_control_gift_policy WHERE id=1');
     const flags=rows[0]||{allow_self_gifts:false,allow_other_gifts:false};

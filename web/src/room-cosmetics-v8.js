@@ -34,7 +34,12 @@ function decorateSeat(seat,id){
   const frame=items.find(x=>x.kind==='frame'),url=remote(frame?.asset);
   if(!url)return;
   const art=document.createElement('img');art.className='akira-sovera-room-frame';
-  const file=url.split('/').pop().split('?')[0],geo=portrait[file]||[.59,.53],ratio=1/geo[0];
+  const file=url.split('/').pop().split('?')[0],geo=portrait[file]||[.59,.53];
+  // Room seats are narrow (four per row); size the artwork and the actual
+  // portrait together so the original cutout fits without overlapping seats.
+  const ratio=Math.min(1/geo[0],seat.closest('.host')?1.85:1.45);
+  const face=host.querySelector('.face');
+  if(face)face.style.inset=((1-ratio*geo[0])*50)+'%';
   art.style.width=ratio*100+'%';art.style.height=ratio*100+'%';
   art.style.left=(50-ratio*50)+'%';art.style.top=(50-ratio*geo[1]*100)+'%';
   art.src=local(url);art.alt=frame.name||'Equipped frame';

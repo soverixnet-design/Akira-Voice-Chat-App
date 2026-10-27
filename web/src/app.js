@@ -1282,7 +1282,7 @@ function authRender(){
   }
   h+='<div class="aerr" id="ae"></div><button class="big" id="ago" style="margin-top:4px">'+(s?"Create account":"Log in")+'</button>';
   if(!s)h+='<div class="alt"><button id="af">🔑 Forgot password?</button></div>';
-  h+='</div><div class="lbl" style="margin-top:14px">Email accounts are connected to the Akira server. Voice and virtual coins are not yet live.</div></div>';
+  h+='</div><div class="lbl" style="margin-top:14px">Live Akira features require a verified login and connection to the official server.</div></div>';
   $("au").innerHTML=h;
   $("au").querySelectorAll(".atabs button").forEach(function(b){b.onclick=function(){showAuth(b.dataset.m)}});
   bindPol($("au"));$("abk").onclick=function(){showAuth("welcome")};

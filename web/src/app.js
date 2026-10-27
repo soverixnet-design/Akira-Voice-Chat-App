@@ -388,22 +388,27 @@ async function loadAkiraRooms(){
 }
 var amode="login",apic=null;
 function showAuth(m){amode=m||"login";authRender();$("au").classList.add("on")}
-function hideAuth(){$("au").classList.remove("on")}
+function hideAuth(){
+  if(window.__akiraAuthVerified!==true){showAuth("login");return}
+  $("au").classList.remove("on")
+}
 function aerr(t){$("ae").textContent=t}
 function enter(a,msg){
   var list=accts().filter(function(x){return x.key!==a.key});list.push(a);saveAccts(list);
   try{localStorage.setItem(SESS_K,a.key);localStorage.setItem("vr_state_v2",JSON.stringify(a.state||{}))}catch(e){}
   A=Object.assign({name:"Me",pic:null,myRoom:null,claim:{d:"",streak:0}},a.p);fixA();try{localStorage.setItem("vr_app_v1",JSON.stringify(A))}catch(e){}
+  window.__akiraAuthVerified=true;
+  document.documentElement.classList.add("akira-auth-verified");
   hideAuth();refresh();renderRooms();loadAkiraRooms();go("home");toast(msg);
 }
 function authRender(){
   $("au").classList.toggle("w",amode==="welcome");
   if(amode==="welcome"){
-    $("au").innerHTML='<div class="wl2"><img class="wimg" src="'+BRAND.top+'" alt="Akira Voice Chat App"><div class="wbtns"><button class="wb g" id="wg"><svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg><span>Continue with Google</span><i>›</i></button><button class="wb p" id="wp"><svg viewBox="0 0 24 24" fill="#fff"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg><span>Continue with Phone</span><i>›</i></button><button class="wb u" id="wgs"><svg viewBox="0 0 24 24" fill="#fff"><path d="M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3zm-8 0c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/></svg><span>Enter as Guest</span><i>›</i></button></div><div class="wfoot">By continuing you agree to our <a href="#" data-pol="terms">Terms &amp; Conditions</a> and <a href="#" data-pol="privacy">Privacy Policy</a></div><img class="wbot" src="'+BRAND.bot+'" alt=""></div>';
+    $("au").innerHTML='<div class="wl2"><img class="wimg" src="'+BRAND.top+'" alt="Akira Voice Chat App"><div class="wbtns"><button class="wb g" id="wg"><svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg><span>Continue with Google</span><i>›</i></button><button class="wb p" id="wp"><svg viewBox="0 0 24 24" fill="#fff"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg><span>Continue with Phone</span><i>›</i></button></div><div class="wfoot">By continuing you agree to our <a href="#" data-pol="terms">Terms &amp; Conditions</a> and <a href="#" data-pol="privacy">Privacy Policy</a></div><img class="wbot" src="'+BRAND.bot+'" alt=""></div>';
     bindPol($("au"));
     $("wg").onclick=function(){toast("Google Login will work once the server is connected")};
     $("wp").onclick=function(){showAuth("login")};
-    $("wgs").onclick=function(){try{localStorage.setItem("vr_guest","1")}catch(e){}hideAuth()};
+
     return;
   }
   var s=amode==="signup",yr=new Date().getFullYear(),i;
@@ -423,12 +428,12 @@ function authRender(){
   }
   h+='<div class="aerr" id="ae"></div><button class="big" id="ago" style="margin-top:4px">'+(s?"Create account":"Log in")+'</button>';
   if(!s)h+='<div class="alt"><button id="af">🔑 Forgot password?</button></div>';
-  h+='</div><div class="alt"><button id="ag">👤 Browse as guest</button></div><div class="lbl" style="margin-top:14px">Email accounts are connected to the Akira server. Voice and virtual coins are not yet live.</div></div>';
+  h+='</div><div class="alt">Sign in to continue</div><div class="lbl" style="margin-top:14px">Email accounts are connected to the Akira server. Voice and virtual coins are not yet live.</div></div>';
   $("au").innerHTML=h;
   $("au").querySelectorAll(".atabs button").forEach(function(b){b.onclick=function(){showAuth(b.dataset.m)}});
   bindPol($("au"));$("abk").onclick=function(){showAuth("welcome")};
   $("eye").onclick=function(){var t=$("apw").type==="password";$("apw").type=t?"text":"password";if($("apw2"))$("apw2").type=$("apw").type}
-  $("ag").onclick=function(){try{localStorage.setItem("vr_guest","1")}catch(e){}hideAuth()};
+
   if($("af"))$("af").onclick=function(){aerr("Password reset will work after the server is added.")};
   if($("apic"))$("apic").onclick=function(){pickImage(260,function(d){apic=d;authRender()})};
   $("ago").onclick=s?doSignup:doLogin;
@@ -475,10 +480,35 @@ function logout(){
   syncAcct();var oldToken=akiraToken();if(oldToken)akiraRequest("/api/v1/auth/logout","POST",undefined,oldToken).catch(function(){});try{localStorage.removeItem(AKIRA_TOKEN_KEY);localStorage.removeItem(SESS_K);localStorage.removeItem("vr_state_v2");localStorage.removeItem("vr_guest")}catch(e){}
   A={name:"Me",id:String(20000000+Math.floor(Math.random()*79999999)),pic:null,myRoom:null,claim:{d:"",streak:0}};
   try{localStorage.setItem("vr_app_v1",JSON.stringify(A))}catch(e){}
+  window.__akiraAuthVerified=false;
+  document.documentElement.classList.remove("akira-auth-verified");
   fixA();closeSheet();leaveRoom();refresh();renderRooms();go("home");showAuth("welcome");
 }
-/* ===== Start ===== */
-renderRooms();refresh();loadAkiraRooms();
+/* ===== Start: server-verified sessions only, never guest/demo ===== */
+window.__akiraAuthVerified=false;
+async function akiraRestoreSession(){
+  var token=akiraToken();
+  if(!token){showAuth("welcome");return}
+  try{
+    var me=await akiraRequest("/api/v1/auth/me","GET",undefined,token);
+    if(!me||!me.user||!/^\d{6,18}$/.test(String(me.user.id||"")))throw Error("Invalid server session");
+    // Profile identity comes from the authenticated server, not device-local demo state.
+    A.id=String(me.user.id);
+    A.name=String(me.user.displayName||A.name||"Akira User");
+    if(me.user.avatarUrl)A.pic=me.user.avatarUrl;
+    saveA();
+    window.__akiraAuthVerified=true;
+    document.documentElement.classList.add("akira-auth-verified");
+    $("au").classList.remove("on");
+    refresh();renderRooms();await loadAkiraRooms();go("home");
+  }catch(e){
+    // A network outage never means a logged-out visitor may view the home screen.
+    window.__akiraAuthVerified=false;
+    document.documentElement.classList.remove("akira-auth-verified");
+    showAuth("login");
+    toast("Sign in to continue: "+(e.message||"Server unavailable"));
+  }
+}
 document.querySelectorAll("img[data-logo]").forEach(function(i){i.src=BRAND.logo});
-try{if(!authed()&&!localStorage.getItem("vr_guest"))showAuth("welcome")}catch(e){}
+void akiraRestoreSession();
 setTimeout(function(){$("sp").classList.add("off")},1300);

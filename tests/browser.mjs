@@ -189,6 +189,10 @@ try{
       if(request.method()==='OPTIONS')return route.fulfill({status:204,headers});
       if(path==='/api/v1/rooms/100001/seat'&&request.method()==='POST')taken=true;
       if(path==='/api/v1/auth/me')return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({user:{id:'100002',displayName:'My Real ID'}})});
+      if(path==='/api/v1/wallet')return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({wallet:{balance:'5000'}})});
+      if(path==='/api/v1/community/catalog')return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({items:[{id:'77',kind:'gift',name:'Verified Rose',price:25,asset:'🌹'}]})});
+      if(path==='/api/v1/community/gift-policy')return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({allowSelfGifts:true,allowOtherGifts:true})});
+      if(path==='/api/v1/community/gift')return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({ok:true,total:25,balance:'4975'})});
       const state={ok:true,roomId:'100001',seatCount:10,ownerId:'1',name:'Live Test Room',themeKey:'ocean',
         seats:taken?[{seatNo:1,publicId:'100002',displayName:'My Real ID'}]:[],
         members:[{publicId:'100002',displayName:'My Real ID'}]};
@@ -212,6 +216,11 @@ try{
     await page.locator('.seat[data-i="1"]').getByText('My Real ID').waitFor();
     assert.equal(taken,true);
     assert.equal(await page.locator('#mic').getAttribute('aria-label'),'Mute or unmute');
+    // Real gift recipients include the signed-in user only when server policy allows.
+    await page.addScriptTag({url:'http://127.0.0.1:4174/src/room-v6-giftbox.js'});
+    await page.locator('#bGift').click();
+    await page.getByText('My Real ID',{exact:true}).last().waitFor();
+    await page.getByText('Verified Rose',{exact:true}).waitFor();
     assert.deepEqual(errors,[]);
     results.push({width:390,height:844,status:'live_room_seats_passed'});
     console.log('PASS database-backed voice seats at 390x844');

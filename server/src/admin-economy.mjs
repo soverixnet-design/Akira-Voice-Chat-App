@@ -166,9 +166,12 @@ export async function economyRoutes(req,url,send){
     }
     let verified=false;
     if(task.action==='daily_checkin'){
-     const proof=await c.query("SELECT 1 FROM akira_wallet_transactions WHERE user_id=$1 AND reason='daily_checkin' AND reference_key=$2 LIMIT 1",
-       [account.user.id,'daily:'+account.user.id+':'+day]);
-     verified=Boolean(proof.rows.length);
+     // Both the current 7-day reward endpoint and the older daily check-in
+     // are server-verified ways to complete this task; no client proof accepted.
+     const proof=await c.query(
+       "SELECT EXISTS(SELECT 1 FROM akira_daily_reward_claims WHERE user_id=$1 AND reward_date=$2::date) OR EXISTS(SELECT 1 FROM akira_wallet_transactions WHERE user_id=$1 AND reason='daily_checkin' AND reference_key=$3) AS completed",
+       [account.user.id,day,'daily:'+account.user.id+':'+day]);
+     verified=proof.rows[0]?.completed===true;
     }else if(task.action==='send_paid_gift'){
      const proof=await c.query("SELECT 1 FROM akira_control_gifts WHERE sender_id=$1 AND total>0 AND (created_at AT TIME ZONE 'UTC')::date=$2::date LIMIT 1",[account.user.id,day]);
      verified=Boolean(proof.rows.length);

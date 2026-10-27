@@ -32,6 +32,23 @@
     apply();
   }
   function selected(kind){return installed.find(x=>x.kind===kind&&x.equipped);}
+  // Artwork portrait cutouts, read from Sovera's original Flutter EffectPack geometry.
+  const soveraPortrait={
+    'phoenix.png':[.43,.53], 'ice.png':[.43,.53], 'dragon.png':[.43,.53],
+    'vip7.webp':[.43,.53], 'royal-gold.webp':[.61,.52],
+    'violet-love.webp':[.59,.53], 'ice-admin.webp':[.59,.53],
+    'dragon-gold.webp':[.59,.51], 'ice-dragon.webp':[.58,.52],
+    'violet-phoenix.webp':[.59,.53]
+  };
+  function frameBox(frame,host,url){
+    const file=url.split('/').pop().split('?')[0];
+    const g=soveraPortrait[file]||[.59,.53],size=host.matches('.mav')?.92:1;
+    const zoom=size/g[0];
+    frame.style.width=(zoom*100)+'%';
+    frame.style.height=(zoom*100)+'%';
+    frame.style.left=(50-50*zoom)+'%';
+    frame.style.top=(50-g[1]*zoom*100)+'%';
+  }
   function apply(){
     const item=selected('frame');
     for(const host of document.querySelectorAll('#v-me .mav, #pfc .pavw')){
@@ -42,6 +59,7 @@
       host.classList.add('akira-v8-frame-host');
       const frame=document.createElement('img');
       frame.className='akira-v8-frame';frame.src=url;frame.alt='Equipped avatar frame';
+      frameBox(frame,host,url);
       host.appendChild(frame);
     }
   }
@@ -88,6 +106,6 @@
   }
   window.akiraEquipment={open,refresh,decorate:()=>{if(loaded)apply()}};
   const style=document.createElement('style');
-  style.textContent='.akira-v8-categories{display:flex;gap:8px;margin:8px 0 14px}.akira-v8-categories button{flex:1;padding:11px;border:1px solid #6d4ae5;border-radius:12px;color:white;background:#241747}.akira-v8-categories .on{background:linear-gradient(135deg,#7c3aed,#d946ef)}.akira-v8-items{display:grid;gap:9px;max-height:45vh;overflow:auto}.akira-v8-item{display:flex;align-items:center;gap:12px;padding:10px;border:1px solid #ffffff30;border-radius:14px;background:#ffffff13}.akira-v8-icon{width:54px;height:54px;object-fit:contain;display:grid;place-items:center;font-size:34px}.akira-v8-item-text{flex:1;min-width:0}.akira-v8-item-text b,.akira-v8-item-text small{display:block}.akira-v8-item-text small{opacity:.7}.akira-v8-item button{border:0;border-radius:9px;padding:10px;background:#a855f7;color:white}.akira-v8-item button:disabled{opacity:.6}.akira-v8-frame-host{position:relative!important}.akira-v8-frame{position:absolute!important;inset:-12%!important;width:124%!important;height:124%!important;object-fit:contain!important;pointer-events:none!important;z-index:6!important;animation:akira-v8-appear 3s ease-in-out 1}.akira-v8-frame-host .lvbadge{z-index:7}@keyframes akira-v8-appear{0%{filter:brightness(1)}50%{filter:brightness(1.55)}100%{filter:brightness(1)}}';
+  style.textContent='.akira-v8-categories{display:flex;gap:8px;margin:8px 0 14px}.akira-v8-categories button{flex:1;padding:11px;border:1px solid #6d4ae5;border-radius:12px;color:white;background:#241747}.akira-v8-categories .on{background:linear-gradient(135deg,#7c3aed,#d946ef)}.akira-v8-items{display:grid;gap:9px;max-height:45vh;overflow:auto}.akira-v8-item{display:flex;align-items:center;gap:12px;padding:10px;border:1px solid #ffffff30;border-radius:14px;background:#ffffff13}.akira-v8-icon{width:54px;height:54px;object-fit:contain;display:grid;place-items:center;font-size:34px}.akira-v8-item-text{flex:1;min-width:0}.akira-v8-item-text b,.akira-v8-item-text small{display:block}.akira-v8-item-text small{opacity:.7}.akira-v8-item button{border:0;border-radius:9px;padding:10px;background:#a855f7;color:white}.akira-v8-item button:disabled{opacity:.6}.akira-v8-frame-host{position:relative!important}.akira-v8-frame{position:absolute!important;object-fit:contain!important;pointer-events:none!important;z-index:6!important;animation:akira-v8-appear 3s ease-in-out 1}.akira-v8-frame-host .lvbadge{z-index:7}@keyframes akira-v8-appear{0%{filter:brightness(1)}50%{filter:brightness(1.55)}100%{filter:brightness(1)}}';
   document.head.appendChild(style);
 })();

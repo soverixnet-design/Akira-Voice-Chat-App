@@ -14,10 +14,10 @@
     '#akiraGameOverlay .gameTab{font-size:12px;min-height:37px}',
     '#akiraGameOverlay .gameExpand{flex:none;min-width:44px;min-height:38px;border:1px solid #9f7aea;background:#4c2488;color:#fff;border-radius:13px;font-size:19px}',
     '#akiraGameOverlay .gameClose{min-width:57px;min-height:38px}',
-    '#akiraGameOverlay.inRoom .gamePanel{top:auto;bottom:0;height:76dvh;border-radius:20px 20px 0 0}',
+    '#akiraGameOverlay.inRoom .gamePanel{top:auto;bottom:0;height:min(92dvh,calc(100dvh - env(safe-area-inset-top,0px) - 12px));border-radius:20px 20px 0 0}',
     '#akiraGameOverlay.akiraFull .gamePanel{top:0;bottom:0;height:100dvh;border-radius:0}',
     '#akiraGameOverlay iframe{min-height:0;min-width:0;display:block}',
-    '@media(max-height:630px){#akiraGameOverlay.inRoom .gamePanel{height:90dvh}#akiraGameOverlay .gameHead{min-height:46px}}'
+    '@media(max-height:630px){#akiraGameOverlay.inRoom .gamePanel{height:96dvh}#akiraGameOverlay .gameHead{min-height:46px}}'
   ].join('\n');
   document.head.appendChild(style);
   var head=root.querySelector('.gameHead');

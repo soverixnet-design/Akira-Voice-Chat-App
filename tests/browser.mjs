@@ -12,10 +12,26 @@ try{
     const page=await browser.newPage({viewport:{width,height},reducedMotion:'reduce'});
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
     page.on('response',r=>{if(r.status()>=400)errors.push(`${r.status()} ${r.url()}`)});
+    // Visitors never access the app, even with an obsolete guest flag.
+    await page.addInitScript(()=>localStorage.setItem('vr_guest','1'));
     await page.goto('http://127.0.0.1:4174');
     await page.locator('#sp').waitFor({state:'attached'});
     await page.waitForFunction(()=>document.getElementById('sp').classList.contains('off'));
-    await page.locator('#wgs').click();
+    await page.locator('#au.on').waitFor();
+    assert.equal(await page.locator('#wgs, #ag').count(),0);
+    assert.equal(await page.locator('#v-home').isVisible(),false);
+    // The production session check is server-backed; mock only here in CI.
+    await page.route('https://api.soverixnet.online/**',async route=>{
+      const path=new URL(route.request().url()).pathname;
+      const headers={'access-control-allow-origin':'http://127.0.0.1:4174','access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'authorization,content-type'};
+      if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers});
+      const payload=path==='/api/v1/auth/me'?{user:{id:'100002',displayName:'Verified Test'}}:
+        path==='/api/v1/rooms'?{rooms:[]}:{ok:true};
+      return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(payload)});
+    });
+    await page.evaluate(()=>localStorage.setItem('akira_server_token_v1','A'.repeat(43)));
+    await page.reload();
+    await page.waitForFunction(()=>window.__akiraAuthVerified===true);
     const box=await page.locator('#app').boundingBox();
     assert.equal(box.width,width);assert.equal(box.height,height);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);
@@ -23,12 +39,9 @@ try{
       await page.locator(`.ni[data-v="${tab}"]`).click();
       assert.equal(await page.locator(`#v-${tab}`).isVisible(),true);
     }
-    await page.locator('.card').first().click();
-    // Guest mode is intentionally not allowed to join a live room.
-    // Verify the login gate rather than waiting for an unauthenticated room iframe.
-    await page.locator('#au.on').waitFor();
-    assert.equal(await page.locator('#rw.on').count(),0);
-    await page.evaluate(()=>hideAuth());
+    // No mock rooms should be offered when the server returned an empty room list.
+    assert.equal(await page.locator('.card').count(),0);
+    assert.equal(await page.locator('#au.on').count(),0);
     if(width===390)await page.screenshot({path:'test-results/home-390.png'});
     // Close thread before profile before recharge, then navigate home.
     await page.evaluate(()=>{go('me');rechargeSheet();openProfile({id:'123',n:'Test',e:'🙂'});openThread(['Test','🙂','Hi','Now']);openSheet('<h3>Test</h3>')});
@@ -53,7 +66,8 @@ try{
       const req=route.request(),path=new URL(req.url()).pathname;
       const headers={'access-control-allow-origin':'http://127.0.0.1:4174','access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'authorization,content-type'};
       if(req.method()==='OPTIONS')return route.fulfill({status:204,headers});
-      const payload=path==='/api/v1/wallet'?{wallet:{balance:6500}}:
+      const payload=path==='/api/v1/auth/me'?{user:{id:'100002',displayName:'Seller Test'}}:
+        path==='/api/v1/wallet'?{wallet:{balance:6500}}:
         path==='/api/v1/community/balance'?{coins:'6500',diamonds:'350'}:
         path==='/api/v1/community/exchange-rate'?{coins_per_100:70}:
         path==='/api/v1/community/sellers'?{items:[{id:'100012',name:'Verified Seller'}]}:
@@ -174,6 +188,11 @@ try{
         'access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'authorization,content-type'};
       if(request.method()==='OPTIONS')return route.fulfill({status:204,headers});
       if(path==='/api/v1/rooms/100001/seat'&&request.method()==='POST')taken=true;
+      if(path==='/api/v1/auth/me')return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({user:{id:'100002',displayName:'My Real ID'}})});
+      if(path==='/api/v1/wallet')return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({wallet:{balance:'5000'}})});
+      if(path==='/api/v1/community/catalog')return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({items:[{id:'77',kind:'gift',name:'Verified Rose',price:25,asset:'🌹'}]})});
+      if(path==='/api/v1/community/gift-policy')return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({allowSelfGifts:true,allowOtherGifts:true})});
+      if(path==='/api/v1/community/gift')return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({ok:true,total:25,balance:'4975'})});
       const state={ok:true,roomId:'100001',seatCount:10,ownerId:'1',name:'Live Test Room',themeKey:'ocean',
         seats:taken?[{seatNo:1,publicId:'100002',displayName:'My Real ID'}]:[],
         members:[{publicId:'100002',displayName:'My Real ID'}]};
@@ -183,7 +202,9 @@ try{
     await page.evaluate(()=>{
       AkiraBridge.setContext({id:'100001',ownerId:'100001',userId:'100002',name:'Live Test Room',
         voiceApi:'https://api.soverixnet.online',voiceAuth:'A'.repeat(43)});
+      return window.akiraRoomVerify();
     });
+    await page.waitForFunction(()=>document.documentElement.classList.contains('akira-room-authenticated'));
     // CI has no physical mic. Only permission is mocked, not server seat ownership.
     await page.evaluate(()=>{window.akiraEnsureMicPermission=async()=>true});
     await page.addScriptTag({url:'http://127.0.0.1:4174/src/room-live.js'});
@@ -195,6 +216,11 @@ try{
     await page.locator('.seat[data-i="1"]').getByText('My Real ID').waitFor();
     assert.equal(taken,true);
     assert.equal(await page.locator('#mic').getAttribute('aria-label'),'Mute or unmute');
+    // Real gift recipients include the signed-in user only when server policy allows.
+    await page.addScriptTag({url:'http://127.0.0.1:4174/src/room-v6-giftbox.js'});
+    await page.locator('#bGift').click();
+    await page.locator('#sheet [data-guser="100002"]').waitFor();
+    await page.getByText('Verified Rose',{exact:true}).waitFor();
     assert.deepEqual(errors,[]);
     results.push({width:390,height:844,status:'live_room_seats_passed'});
     console.log('PASS database-backed voice seats at 390x844');

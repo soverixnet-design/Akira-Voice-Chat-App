@@ -86,6 +86,7 @@ async function openRoom(r){
   cur=r;
   $("rf").src="room.html";
   resumeRoom();
+  window.akiraEquipment?.showEntry?.();
 }
 function resumeRoom(){
   $("rw").classList.add("on");$("mini").classList.remove("on");
@@ -115,9 +116,38 @@ $("plus").onclick=function(){if(A.myRoom)openRoom(myR());else createSheet()};
 var DR=[100,150,200,300,400,600,1000];
 function today(){return new Date().toISOString().slice(0,10)}
 function dailySheet(){
-  var done=A.claim.d===today(),st=A.claim.streak%7;
-  openSheet('<h3>🎁 Daily check-in</h3><div class="g4">'+DR.map(function(v,i){return'<button class="'+(i===st&&!done?"sel":"")+'" style="'+(i<st||(done&&i===(st+6)%7)?"opacity:.5":"")+'"><span>'+(i===6?"🎁":"🪙")+'</span>Day '+bn(i+1)+'<br>'+bn(v)+'</button>'}).join("")+'</div><button class="big" id="cl" '+(done?"disabled style=\"opacity:.5\"":"")+'>'+(done?"Today reward already claimed ✓":"🪙 "+bn(DR[st])+" Get coins")+'</button>');
-  if(!done)$("cl").onclick=function(){var v=DR[st];A.claim={d:today(),streak:A.claim.streak+1};saveA();addCoins(v);closeSheet();toast("+"+bn(v)+" coins received 🎉")};
+  openSheet('<h3>🎁 Daily check-in</h3><p style="padding:12px">Checking verified daily coin rewards…</p>');
+  var token=typeof window.akiraToken==='function'?window.akiraToken():'';
+  if(!token||typeof window.akiraRequest!=='function'){
+    openSheet('<h3>🎁 Daily check-in</h3><p>Sign in to claim coins to your real wallet.</p>');
+    return;
+  }
+  function showStatus(d){
+    var amounts=Array.isArray(d.amounts)&&d.amounts.length===7?d.amounts:DR;
+    var day=Math.min(7,Math.max(1,Number(d.streak)||1)),done=d.claimed===true;
+    var tiles=amounts.map(function(v,i){
+      return '<button type="button" class="'+(i+1===day?'sel':'')+'" style="'+(i+1<day?'opacity:.65':'')+'"><span>'+(i===6?'🎁':'🪙')+'</span>Day '+bn(i+1)+'<br>🪙 '+bn(v)+'</button>';
+    }).join('');
+    openSheet('<h3>🎁 Daily check-in</h3><div class="g4">'+tiles+'</div>'+
+      '<p style="padding:8px 12px;font-size:12px">Server resets at 00:00 UTC. Day '+day+
+      (done?' claimed today.':' available today.')+'</p>'+
+      '<button class="big" id="cl" '+(done?'disabled style="opacity:.55"':'')+'>'+
+      (done?'Today reward already claimed ✓':'🪙 '+bn(d.nextReward||amounts[day-1])+' Claim real coins')+'</button>');
+    if(!done)$("cl").onclick=async function(){
+      var button=$("cl");if(!button||button.disabled)return;button.disabled=true;
+      try{
+        var result=await window.akiraRequest('/api/v1/rewards/daily','POST',{},token);
+        if(!result||!result.ok)throw Error('Reward not confirmed');
+        toast(result.alreadyClaimed?'Already claimed today ✓':'+'+bn(result.amount)+' real coins received 🎉');
+        window.dispatchEvent(new Event('akira:wallet-updated'));
+        if(typeof window.akiraRefreshWallet==='function')void window.akiraRefreshWallet();
+        dailySheet();
+      }catch(err){button.disabled=false;toast('Reward: '+(err.message||'Server unavailable'))}
+    };
+  }
+  window.akiraRequest('/api/v1/rewards/daily','GET',undefined,token)
+    .then(function(d){if(!d||!d.ok)throw Error('Daily rewards unavailable');showStatus(d)})
+    .catch(function(err){openSheet('<h3>🎁 Daily check-in</h3><p style="padding:12px">Real daily rewards are not available: '+esc(err.message||'Server unavailable')+'</p>')});
 }
 var RCT=0,RATE=1,N=function(n){return Number(n).toLocaleString("en-US")};
 function addDia(n){var s=ls("vr_state_v2",{});s.dia=(s.dia==null?2500:s.dia)+n;try{localStorage.setItem("vr_state_v2",JSON.stringify(s))}catch(e){}refresh()}
@@ -150,9 +180,41 @@ function sellerSheet(){
 }
 $("hc").onclick=function(){rechargeSheet()};
 function inviteSheet(){
-  var url="https://example.com/?ref="+A.id;
-  openSheet('<h3>🤝 Invite a friend</h3><div style="font-size:13.5px;line-height:1.7">When someone recharges through your invite, you earn a <b style="color:var(--gold)">5% Reward</b>.</div><div class="idp" style="margin-top:12px">Invite code: <b>'+A.id+'</b></div><button class="big" id="sv">📤 Share</button>');
-  $("sv").onclick=function(){var t="Join me on Akira Voice Chat App! Code: "+A.id;if(navigator.share){navigator.share({text:t,url:url}).catch(function(){})}else{try{navigator.clipboard.writeText(t+" "+url);toast("Link copied ✓")}catch(e){toast("Code: "+A.id)}}};
+  var url='https://voice.soverixnet.online/',token=typeof window.akiraToken==='function'?window.akiraToken():'';
+  openSheet('<h3>🤝 Invite friends</h3><p style="padding:12px">Loading verified invite count…</p>');
+  function show(status,warning){
+    var count=status&&Number.isSafeInteger(Number(status.verifiedInvites))?String(status.verifiedInvites):'Not available';
+    var canApply=status&&status.canEnterCode===true;
+    var shareCode=String(A.id||'');
+    openSheet('<h3>🤝 Invite friends</h3>'+
+      '<p style="font-size:13px;line-height:1.6">Invite a friend with your ID. They must enter it after signing in. Only verified registrations are counted. No coin bonus is promised.</p>'+
+      '<div class="idp" style="margin:10px 0">Your invite ID: <b>'+esc(shareCode)+'</b></div>'+
+      '<div class="idp" style="margin:10px 0">Verified invites: <b>'+esc(count)+'</b></div>'+
+      (status&&status.invitedBy?'<div style="padding:9px">You were invited by ID '+esc(status.invitedBy)+'</div>':'')+
+      (warning?'<p style="color:#fda4af;font-size:12px">'+esc(warning)+'</p>':'')+
+      '<button class="big" id="sv">📤 Share Akira & my ID</button>'+
+      (canApply?'<div style="margin-top:15px"><label>Have a friend’s invite ID?</label><input class="field" inputmode="numeric" maxlength="18" id="invCode" placeholder="Enter 6-digit or longer ID"><button class="big" id="invClaim">Confirm invite code</button></div>':''));
+    $("sv").onclick=function(){
+      var text='Join Akira Voice Chat. My invite ID is '+shareCode+'. After creating an account, open Invite and enter that ID.';
+      if(navigator.share)navigator.share({text:text,url:url}).catch(function(){});
+      else if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text+' '+url)
+        .then(function(){toast('Invite copied ✓')}).catch(function(){toast(url)});
+      else toast(url);
+    };
+    if(canApply)$("invClaim").onclick=async function(){
+      var code=String($("invCode").value||'').trim();
+      if(!/^\d{6,18}$/.test(code)){toast('Enter a valid user ID');return}
+      var button=$("invClaim");button.disabled=true;
+      try{
+        await window.akiraRequest('/api/v1/referrals/claim','POST',{inviteCode:code},token);
+        toast('Invite verified ✓');inviteSheet();
+      }catch(e){button.disabled=false;toast('Invite: '+(e.message||'Verification failed'))}
+    };
+  }
+  if(!token||typeof window.akiraRequest!=='function'){show(null,'Sign in to see your verified invite count.');return}
+  window.akiraRequest('/api/v1/referrals','GET',undefined,token)
+    .then(function(data){if(!data||!data.ok)throw Error('Invite tracking unavailable');show(data,'')})
+    .catch(function(err){show(null,'Invite tracking is not active on the server: '+(err.message||'Unavailable'))});
 }
 $("qd").onclick=dailySheet;$("qr").onclick=rechargeSheet;$("qi").onclick=inviteSheet;$("qg").onclick=function(){toast("Enter a room and play games 🎮")};
 /* ===== Ranking ===== */
@@ -235,13 +297,14 @@ function pfWire(root,m,mine){
     q("#pe",editSheet);q("#wr",rechargeSheet);
     root.querySelectorAll("[data-m]").forEach(function(b){b.onclick=function(){var k=b.dataset.m;
       if(k==="home"){$("pfo").classList.remove("on");if(A.myRoom)openRoom(myR());else createSheet()}
-      else if(k==="daily")dailySheet();else if(k==="invite")inviteSheet();else if(k==="recharge")rechargeSheet();else if(k==="set")settingsSheet();else toast("This section is coming soon")}});
+      else if(k==="daily")dailySheet();else if(k==="invite")inviteSheet();else if(k==="recharge")rechargeSheet();else if(k==="set")settingsSheet();else if(k==="frame"||k==="entry"||k==="store")window.akiraEquipment?.open(k==="entry"?"entry":"frame");else toast("This section is coming soon")}});
   }else{
     q("#pfol",function(){A.fol[m.id]=!A.fol[m.id];saveA();rr()});
     q("#pmsg",function(){openThread([m.n,m.e,"👋 Hi!","Now"])});
     q("#pgift",function(){if($("rw").classList.contains("on")&&m.u&&$("rf").contentWindow){$("pfo").classList.remove("on");AkiraBridge.toRoom({t:"gift",seat:m.u.seat})}else toast("Enter a room and send gifts 🎁")});
     q("#pmore",function(){openSheet('<h3>'+esc(m.n)+'</h3><div class="acts"><button class="act" id="rp1"><span>🚩</span>Report</button><button class="act" id="bl1"><span>🚫</span>Block</button><button class="act" id="cp1"><span>📋</span>ID Copy</button></div>');$("rp1").onclick=function(){closeSheet();toast("Report sent")};$("bl1").onclick=function(){closeSheet();toast("Blocked")};$("cp1").onclick=function(){closeSheet();toast("ID: "+m.id)}});
   }
+  window.akiraEquipment?.decorate?.(root,m,mine);
 }
 function meHTML(m){
   var av=m.pic?'style="background-image:url('+m.pic+')"':'';
@@ -327,22 +390,27 @@ async function loadAkiraRooms(){
 }
 var amode="login",apic=null;
 function showAuth(m){amode=m||"login";authRender();$("au").classList.add("on")}
-function hideAuth(){$("au").classList.remove("on")}
+function hideAuth(){
+  if(window.__akiraAuthVerified!==true){showAuth("login");return}
+  $("au").classList.remove("on")
+}
 function aerr(t){$("ae").textContent=t}
 function enter(a,msg){
   var list=accts().filter(function(x){return x.key!==a.key});list.push(a);saveAccts(list);
   try{localStorage.setItem(SESS_K,a.key);localStorage.setItem("vr_state_v2",JSON.stringify(a.state||{}))}catch(e){}
   A=Object.assign({name:"Me",pic:null,myRoom:null,claim:{d:"",streak:0}},a.p);fixA();try{localStorage.setItem("vr_app_v1",JSON.stringify(A))}catch(e){}
-  hideAuth();refresh();renderRooms();loadAkiraRooms();go("home");toast(msg);
+  window.__akiraAuthVerified=true;
+  document.documentElement.classList.add("akira-auth-verified");
+  hideAuth();refresh();renderRooms();loadAkiraRooms();go("home");if(window.akiraEquipment)window.akiraEquipment.refresh().catch(function(){});toast(msg);
 }
 function authRender(){
   $("au").classList.toggle("w",amode==="welcome");
   if(amode==="welcome"){
-    $("au").innerHTML='<div class="wl2"><img class="wimg" src="'+BRAND.top+'" alt="Akira Voice Chat App"><div class="wbtns"><button class="wb g" id="wg"><svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg><span>Continue with Google</span><i>›</i></button><button class="wb p" id="wp"><svg viewBox="0 0 24 24" fill="#fff"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg><span>Continue with Phone</span><i>›</i></button><button class="wb u" id="wgs"><svg viewBox="0 0 24 24" fill="#fff"><path d="M16 11c1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3 1.3 3 3 3zm-8 0c1.7 0 3-1.3 3-3S9.7 5 8 5 5 6.3 5 8s1.3 3 3 3zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/></svg><span>Enter as Guest</span><i>›</i></button></div><div class="wfoot">By continuing you agree to our <a href="#" data-pol="terms">Terms &amp; Conditions</a> and <a href="#" data-pol="privacy">Privacy Policy</a></div><img class="wbot" src="'+BRAND.bot+'" alt=""></div>';
+    $("au").innerHTML='<div class="wl2"><img class="wimg" src="'+BRAND.top+'" alt="Akira Voice Chat App"><div class="wbtns"><button class="wb g" id="wg"><svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg><span>Continue with Google</span><i>›</i></button><button class="wb p" id="wp"><svg viewBox="0 0 24 24" fill="#fff"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1l-2.3 2.2z"/></svg><span>Continue with Phone</span><i>›</i></button></div><div class="wfoot">By continuing you agree to our <a href="#" data-pol="terms">Terms &amp; Conditions</a> and <a href="#" data-pol="privacy">Privacy Policy</a></div><img class="wbot" src="'+BRAND.bot+'" alt=""></div>';
     bindPol($("au"));
     $("wg").onclick=function(){toast("Google Login will work once the server is connected")};
     $("wp").onclick=function(){showAuth("login")};
-    $("wgs").onclick=function(){try{localStorage.setItem("vr_guest","1")}catch(e){}hideAuth()};
+
     return;
   }
   var s=amode==="signup",yr=new Date().getFullYear(),i;
@@ -362,12 +430,12 @@ function authRender(){
   }
   h+='<div class="aerr" id="ae"></div><button class="big" id="ago" style="margin-top:4px">'+(s?"Create account":"Log in")+'</button>';
   if(!s)h+='<div class="alt"><button id="af">🔑 Forgot password?</button></div>';
-  h+='</div><div class="alt"><button id="ag">👤 Browse as guest</button></div><div class="lbl" style="margin-top:14px">Email accounts are connected to the Akira server. Voice and virtual coins are not yet live.</div></div>';
+  h+='</div><div class="alt">Sign in to continue</div><div class="lbl" style="margin-top:14px">Email accounts are connected to the Akira server. Voice and virtual coins are not yet live.</div></div>';
   $("au").innerHTML=h;
   $("au").querySelectorAll(".atabs button").forEach(function(b){b.onclick=function(){showAuth(b.dataset.m)}});
   bindPol($("au"));$("abk").onclick=function(){showAuth("welcome")};
   $("eye").onclick=function(){var t=$("apw").type==="password";$("apw").type=t?"text":"password";if($("apw2"))$("apw2").type=$("apw").type}
-  $("ag").onclick=function(){try{localStorage.setItem("vr_guest","1")}catch(e){}hideAuth()};
+
   if($("af"))$("af").onclick=function(){aerr("Password reset will work after the server is added.")};
   if($("apic"))$("apic").onclick=function(){pickImage(260,function(d){apic=d;authRender()})};
   $("ago").onclick=s?doSignup:doLogin;
@@ -391,7 +459,7 @@ async function doSignup(){
   var b=$("ago");b.disabled=true;
   var r=await API.signup({name:name,key:key,pw:pw,country:c,dob:yy+"-"+String(m+1).padStart(2,"0")+"-"+String(dd).padStart(2,"0"),pic:apic,age:age});
   b.disabled=false;if(!r.ok)return aerr(r.msg);apic=null;
-  enter(r.acct,"Welcome, "+name+"! +"+bn(2000)+" Coin gift 🎁");
+  enter(r.acct,"Welcome, "+name+"! Your coins will reflect verified rewards only.");
 }
 function mask(k){if(k.indexOf("@")>0){var p=k.split("@");return p[0].slice(0,2)+"***@"+p[1]}return"***"+k.slice(-3)}
 
@@ -414,10 +482,36 @@ function logout(){
   syncAcct();var oldToken=akiraToken();if(oldToken)akiraRequest("/api/v1/auth/logout","POST",undefined,oldToken).catch(function(){});try{localStorage.removeItem(AKIRA_TOKEN_KEY);localStorage.removeItem(SESS_K);localStorage.removeItem("vr_state_v2");localStorage.removeItem("vr_guest")}catch(e){}
   A={name:"Me",id:String(20000000+Math.floor(Math.random()*79999999)),pic:null,myRoom:null,claim:{d:"",streak:0}};
   try{localStorage.setItem("vr_app_v1",JSON.stringify(A))}catch(e){}
+  window.__akiraAuthVerified=false;
+  document.documentElement.classList.remove("akira-auth-verified");
   fixA();closeSheet();leaveRoom();refresh();renderRooms();go("home");showAuth("welcome");
 }
-/* ===== Start ===== */
-renderRooms();refresh();loadAkiraRooms();
+/* ===== Start: server-verified sessions only, never guest/demo ===== */
+window.__akiraAuthVerified=false;
+async function akiraRestoreSession(){
+  var token=akiraToken();
+  if(!token){showAuth("welcome");return}
+  try{
+    var me=await akiraRequest("/api/v1/auth/me","GET",undefined,token);
+    if(!me||!me.user||!/^\d{6,18}$/.test(String(me.user.id||"")))throw Error("Invalid server session");
+    // Profile identity comes from the authenticated server, not device-local demo state.
+    A.id=String(me.user.id);
+    A.name=String(me.user.displayName||A.name||"Akira User");
+    if(me.user.avatarUrl)A.pic=me.user.avatarUrl;
+    saveA();
+    window.__akiraAuthVerified=true;
+    document.documentElement.classList.add("akira-auth-verified");
+    $("au").classList.remove("on");
+    refresh();renderRooms();await loadAkiraRooms();go("home");
+    if(window.akiraEquipment)window.akiraEquipment.refresh().catch(function(){});
+  }catch(e){
+    // A network outage never means a logged-out visitor may view the home screen.
+    window.__akiraAuthVerified=false;
+    document.documentElement.classList.remove("akira-auth-verified");
+    showAuth("login");
+    toast("Sign in to continue: "+(e.message||"Server unavailable"));
+  }
+}
 document.querySelectorAll("img[data-logo]").forEach(function(i){i.src=BRAND.logo});
-try{if(!authed()&&!localStorage.getItem("vr_guest"))showAuth("welcome")}catch(e){}
+void akiraRestoreSession();
 setTimeout(function(){$("sp").classList.add("off")},1300);

@@ -19,13 +19,29 @@ function lockUI(){try{rrPill()}catch(e){}$("cstat").innerHTML="🪙 <i>"+bn(S.co
 /* LiveKit voice session: existing visual room layout remains unchanged.
    Production requires a configured LiveKit endpoint and bundled client library. */
 var akiraVoiceRoom=null,akiraVoiceReady=false,akiraVoiceConnecting=false;
+/* The VPS may not yet serve its local vendor bundle. Load the official pinned
+   LiveKit browser SDK only when needed, before asking for the room token. */
+async function akiraEnsureVoiceSdk(){
+  if(window.LivekitClient&&window.LivekitClient.Room)return;
+  if(!window.__akiraVoiceSdkPromise){
+    window.__akiraVoiceSdkPromise=new Promise(function(resolve,reject){
+      var script=document.createElement("script");
+      script.src="https://cdn.jsdelivr.net/npm/livekit-client@2.22.3/dist/livekit-client.umd.min.js";
+      script.crossOrigin="anonymous";
+      script.onload=function(){if(window.LivekitClient&&window.LivekitClient.Room)resolve();else reject(Error("Voice SDK failed to initialize"))};
+      script.onerror=function(){reject(Error("Voice SDK download failed"))};
+      document.head.appendChild(script);
+    });
+  }
+  await window.__akiraVoiceSdkPromise;
+}
 async function akiraStartVoice(){
   if(akiraVoiceConnecting||akiraVoiceRoom)return;
   var ctx=AkiraBridge.getContext()||{};
   if(!ctx.voiceAuth||!ctx.voiceApi||!ctx.id)return;
   akiraVoiceConnecting=true;
   try{
-    if(!window.LivekitClient||!window.LivekitClient.Room)throw Error("Voice SDK unavailable");
+    await akiraEnsureVoiceSdk();
     var res=await fetch(ctx.voiceApi+"/rooms/"+encodeURIComponent(ctx.id)+"/voice-token",{
       method:"POST",headers:{"Authorization":"Bearer "+ctx.voiceAuth,"Accept":"application/json"}
     });

@@ -11,7 +11,7 @@
   };
  }
  document.addEventListener('click',event=>{
-  const target=event.target?.closest?.('#rcp [data-p],#rcp [data-e],#sh #cl,#sh #pc,#sh #ec');
+  const target=event.target?.closest?.('#rcp [data-p],#rcp [data-e],#sh #pc,#sh #ec');
   if(!target)return;
   event.preventDefault();
   event.stopImmediatePropagation();

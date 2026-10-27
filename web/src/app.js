@@ -202,7 +202,7 @@ function inviteSheet(){
     };
     if(canApply)$("invClaim").onclick=async function(){
       var code=String($("invCode").value||'').trim();
-      if(!/^\\d{6,18}$/.test(code)){toast('Enter a valid user ID');return}
+      if(!/^\d{6,18}$/.test(code)){toast('Enter a valid user ID');return}
       var button=$("invClaim");button.disabled=true;
       try{
         await window.akiraRequest('/api/v1/referrals/claim','POST',{inviteCode:code},token);

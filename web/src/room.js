@@ -33,7 +33,8 @@ async function akiraEnsureVoiceSdk(){
       document.head.appendChild(script);
     });
   }
-  await window.__akiraVoiceSdkPromise;
+  try{await window.__akiraVoiceSdkPromise}
+  catch(err){window.__akiraVoiceSdkPromise=null;throw err}
 }
 async function akiraStartVoice(){
   if(akiraVoiceConnecting||akiraVoiceRoom)return;

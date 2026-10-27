@@ -32,16 +32,8 @@ async function akiraStartVoice(){
     var data=await res.json();
     if(!res.ok)throw Error(data.error||"Voice server unavailable");
     var room=new window.LivekitClient.Room({adaptiveStream:true,dynacast:true});
-    room.on(window.LivekitClient.RoomEvent.TrackSubscribed,function(track,publication,participant){
-      if(track.kind==="audio"){
-        var peer=String(participant?.identity||'');
-        if(window.__akiraBlockedIds?.has(peer))return;
-        var element=track.attach();
-        element.dataset.akiraVoice="1";
-        element.dataset.akiraVoiceUser=peer;
-        element.autoplay=true;
-        document.body.appendChild(element);
-      }
+    room.on(window.LivekitClient.RoomEvent.TrackSubscribed,function(track){
+      if(track.kind==="audio"){var element=track.attach();element.dataset.akiraVoice="1";document.body.appendChild(element)}
     });
     room.on(window.LivekitClient.RoomEvent.TrackUnsubscribed,function(track){track.detach().forEach(function(el){el.remove()})});
     room.on(window.LivekitClient.RoomEvent.Disconnected,function(){
@@ -50,8 +42,7 @@ async function akiraStartVoice(){
     });
     await room.connect(data.url,data.token);
     akiraVoiceRoom=room;
-    await room.localParticipant.setMicrophoneEnabled(!myMute && window.__akiraVoiceSeatActive===true);
-    window.dispatchEvent(new Event('akira:voice-connected'));
+    await room.localParticipant.setMicrophoneEnabled(Boolean(window.__akiraVoiceSeatActive && !myMute));
     akiraVoiceReady=true;
     toast("Live voice connected");
   }catch(err){toast("Voice: "+(err.message||"connection failed"))}
@@ -78,10 +69,11 @@ function applyTheme(){
   var r=$("rav");r.style.backgroundImage=S.pic?"url("+S.pic+")":"";r.textContent=S.pic?"":(window.__em||"🎙️");
 }
 function seatHTML(s,host){
-  var c=s.empty?"empty":s.lock?"lock":"",face=s.empty?"＋":s.lock?"🔒":s.e;
+  var c=s.empty?"empty":s.lock?"lock":"";
+  var face=s.empty?"＋":s.lock?"🔒":(s.pic?'<img src="'+esc(s.pic)+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">':(s.e||"👤"));
   var bg=(s.empty||s.lock)?"":"background:linear-gradient(145deg,"+COL[s.i%COL.length]+")";
   var bd=(!s.empty&&!s.lock&&s.muted)?'<div class="badge">🔇</div>':"";
-  return'<button class="seat '+c+'" data-i="'+s.i+'"><div class="av"><div class="ring"></div><div class="face" style="'+bg+'">'+face+'</div><i class="wave"></i><i class="wave b"></i>'+(host?'<div class="crown">👑</div>':"")+bd+'</div><div class="nm">'+(s.empty?"Empty":s.lock?"Lock":esc(s.n))+'</div>'+(host?'<div class="tag">Room owner</div>':"")+'</button>';
+  return'<button class="seat '+c+'" data-i="'+s.i+'"><div class="av"><div class="ring"></div><div class="face" style="'+bg+'">'+face+'</div><i class="wave"></i><i class="wave b"></i>'+(host?'<div class="crown">👑</div>':"")+bd+'</div><div class="nm">'+(s.empty?(host?"Owner Seat":"Empty"):s.lock?"Lock":esc(s.n))+'</div>'+(host?'<div class="tag">Room owner</div>':"")+'</button>';
 }
 function render(){
   var g=$("grid"),dense=seats.length>13;
@@ -109,7 +101,8 @@ function toast(t){var x=$("toast");x.textContent=t;x.style.display="block";clear
 function sys(t){var c=$("chat"),d=document.createElement("div");d.className="sys";d.textContent=t;c.appendChild(d);c.scrollTop=c.scrollHeight}
 function msg(name,emoji,text,o){
   o=o||{};var c=$("chat"),d=document.createElement("div");d.className="msg"+(o.me?" me":"")+(o.gf?" gfm":"");
-  d.innerHTML='<div class="mav" style="background:linear-gradient(145deg,'+COL[(o.ci||0)%COL.length]+')">'+emoji+'</div><div class="mb"><span class="mn">'+esc(name)+'<span class="lv">Lv'+bn(o.lv||12)+'</span></span>'+(o.img?'<img class="mimg" src="'+o.img+'" alt="">':'<span class="mt">'+esc(text)+'</span>')+'</div>';
+  var avHTML=o.pic?'<img src="'+esc(o.pic)+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">':emoji;
+  d.innerHTML='<div class="mav" style="overflow:hidden;background:linear-gradient(145deg,'+COL[(o.ci||0)%COL.length]+')">'+avHTML+'</div><div class="mb"><span class="mn">'+esc(name)+'<span class="lv">Lv'+bn(o.lv||12)+'</span></span>'+(o.img?'<img class="mimg" src="'+o.img+'" alt="">':'<span class="mt">'+esc(text)+'</span>')+'</div>';
   var near=c.scrollHeight-c.scrollTop-c.clientHeight<60;c.appendChild(d);
   var im=d.querySelector(".mimg");if(im){im.onclick=function(){view(o.img)};im.onload=function(){if(near||o.me)c.scrollTop=c.scrollHeight}}
   if(near||o.me)c.scrollTop=c.scrollHeight;else $("newb").style.display="block";
@@ -119,7 +112,7 @@ var EM=["😀","😂","😍","🥰","😎","🔥","👏","🎉","❤️","👍",
 $("tray").innerHTML=EM.map(function(e){return"<button>"+e+"</button>"}).join("");
 $("tray").querySelectorAll("button").forEach(function(b){b.onclick=function(){if(chatOff)return;$("txt").value+=b.textContent;$("txt").focus();updBtn()}});
 $("emo").onclick=function(){emojiSheet()};
-function sendText(){var v=$("txt").value.trim();if(!v||chatOff)return;msg("You","😎",v,{me:1,ci:0,lv:level()});$("txt").value="";updBtn();$("tray").classList.remove("on");$("emo").textContent="😊"}
+function sendText(){var v=$("txt").value.trim();if(!v||chatOff)return;var mp=window.__myProfile||{};msg(mp.name||"You","😎",v,{me:1,ci:0,lv:level(),pic:mp.pic||null});$("txt").value="";updBtn();$("tray").classList.remove("on");$("emo").textContent="😊"}
 $("sendTxt").onclick=sendText;$("txt").onkeydown=function(e){if(e.key==="Enter")sendText()};
 function updBtn(){var has=$("txt").value.trim().length>0;$("sendTxt").style.display=has?"grid":"none";$("imgBtn").style.display=has?"none":"grid"}
 $("txt").oninput=updBtn;;
@@ -155,19 +148,27 @@ function pickImage(max,cb){
       c.getContext("2d").drawImage(im,0,0,c.width,c.height);cb(c.toDataURL("image/jpeg",.8))};im.src=r.result};r.readAsDataURL(file)};
   f.click();
 }
+function notifyRoomUpdated(){
+  try{AkiraBridge.toApp({t:"room-updated",id:$("rid").textContent,name:S.name,pic:S.pic||null,bg:S.bg||null,theme:S.theme})}catch(e){}
+}
 function settings(){
+  var hasLiveToken=Boolean(AkiraBridge.getContext()&&AkiraBridge.getContext().voiceAuth);
+  if(hasLiveToken&&!window.__akiraIsOwner){
+    open('<h3>ℹ️ Room Info</h3><div class="row" style="cursor:default"><div>🎙️ '+esc(S.name)+'<small>🆔 '+esc($("rid").textContent)+' · View only (Owner controls settings)</small></div></div>');
+    return;
+  }
   open('<h3>⚙️ Room settings</h3><div class="pic"><div class="big" id="pbig" style="'+(S.pic?"background-image:url("+S.pic+")":"")+'">'+(S.pic?"":"🎙️")+'<i>📷</i></div><div style="flex:1"><div class="lbl" style="margin-top:0">Room name</div><input class="field" id="nm" maxlength="30"></div></div><div class="row" id="rTh"><div>🎨 Room theme<small>Colors and background image</small></div><span>›</span></div><div class="row" id="rSe"><div>🪑 Seat arrangement<small>Now '+bn(seats.length)+' seats · frame style</small></div><span>›</span></div><div class="row" id="rRw"><div>💰 Room Reward<small>Earn 10% of all gifts sent in your room · weekly</small></div><span>›</span></div><div class="gbar"><button class="send" id="save">Save</button></div>');
   $("nm").value=S.name;$("nm").oninput=function(){S.name=$("nm").value.slice(0,30)};
-  $("pbig").onclick=function(){pickImage(300,function(d){S.pic=d;save();applyTheme();settings();toast("Room picture changed ✓")})};
+  $("pbig").onclick=function(){pickImage(400,function(d){S.pic=d;save();applyTheme();notifyRoomUpdated();settings();toast("Room picture changed ✓")})};
   $("rTh").onclick=themeSheet;$("rSe").onclick=seatSet;$("rRw").onclick=rewardSheet;
-  $("save").onclick=function(){S.name=$("nm").value.trim()||"My room";save();applyTheme();close();toast("Settings saved ✓")};
+  $("save").onclick=function(){S.name=$("nm").value.trim()||"My room";save();applyTheme();notifyRoomUpdated();close();toast("Settings saved ✓")};
 }
 function themeSheet(){
   open('<h3><button class="back" id="bk">‹</button>🎨 Room theme</h3><div class="themes">'+TH.map(function(t){return'<button class="th'+(!S.bg&&S.theme===t.id?" sel":"")+'" data-id="'+t.id+'" style="background:linear-gradient(160deg,'+t.a+','+t.c1+' 55%,'+t.b+')">'+t.n+'</button>'}).join("")+'</div><div class="row" id="gal" style="margin-top:10px"><div>🖼️ Background from gallery<small>'+(S.bg?"Your own photo is on":"Choose your own photo")+'</small></div><span>›</span></div>'+(S.bg?'<div class="row" id="rmbg" style="color:#fda4af"><div>Remove photo and return to theme</div></div>':""));
   $("bk").onclick=settings;
-  $("sheet").querySelectorAll(".th").forEach(function(b){b.onclick=function(){S.theme=b.dataset.id;S.bg=null;save();applyTheme();themeSheet()}});
-  $("gal").onclick=function(){pickImage(900,function(d){S.bg=d;save();applyTheme();themeSheet();toast("Background changed ✓")})};
-  if($("rmbg"))$("rmbg").onclick=function(){S.bg=null;save();applyTheme();themeSheet()};
+  $("sheet").querySelectorAll(".th").forEach(function(b){b.onclick=function(){S.theme=b.dataset.id;S.bg=null;save();applyTheme();notifyRoomUpdated();themeSheet()}});
+  $("gal").onclick=function(){pickImage(900,function(d){S.bg=d;save();applyTheme();notifyRoomUpdated();themeSheet();toast("Background changed ✓")})};
+  if($("rmbg"))$("rmbg").onclick=function(){S.bg=null;save();applyTheme();notifyRoomUpdated();themeSheet()};
 }
 function setSeats(n){
   n=Math.max(5,Math.min(21,n));if(n===seats.length)return;
@@ -213,6 +214,8 @@ function rewardSheet(){
 function botGift(){
   var o=others();if(!o.length||document.hidden)return;var s=o[Math.floor(Math.random()*o.length)],g=G[[0,1,2,3,4,5,6,7,8,12][Math.floor(Math.random()*10)]];
   rewardAdd(g[1]);save();lockUI();msg(s.n,s.e,"→ You  "+g[0]+" "+g[2],{gf:1,lv:10+s.i*3});fly(g[0],0,0,g[1]);
+  var mp=window.__myProfile||{};
+  try{AkiraBridge.toApp({t:"live-banner",kind:"gift",senderName:s.n,senderId:sid(s),senderPic:s.pic||null,senderEmoji:s.e||"🎁",recipientName:mp.name||"You",giftIcon:g[0],giftName:g[2],qty:1,amount:g[1]})}catch(e){}
 }
 function luckyFx(win,mult,g){
   var d=document.createElement("div");d.className="lpop";d.innerHTML='<div class="lp1">'+g[0]+'</div>'+(win>0?'<b>LUCKY! x'+mult+'</b><span>+🪙 '+bn(win)+'</span>':'<b>No bonus</b><span>Better luck next time</span>');
@@ -243,8 +246,14 @@ function sendGift(){
   if(g[3]===2){for(var k=0;k<qty*rec.length;k++){var m=luckyRoll();mult=Math.max(mult,m);win+=m*g[1]}S.coins+=win}
   save();close();lockUI();
   if(level()>before){sys("🎉 Level up! Now Level "+bn(level()));if(before<S.minLv&&level()>=S.minLv)sys("🖼️ Photo sending unlocked!")}
-  msg("You","😎","→ "+rec.map(function(i){return seats[i].n}).join(", ")+"  "+g[0]+" "+g[2]+" x"+bn(qty),{me:1,gf:1,lv:level()});
-  try{AkiraBridge.toApp({t:"gift",g:g[0],n:qty*rec.length})}catch(e){}rec.forEach(function(r,ri){var se=seatEl(r);if(se)se.scrollIntoView({block:"nearest"});for(var k=0;k<qty;k++)fly(g[0],r,ri*180+k*140,g[1])});
+  var mp=window.__myProfile||{name:"You",id:"100001",pic:null};
+  var recNames=rec.map(function(i){return seats[i].n}).join(", ");
+  msg(mp.name||"You","😎","→ "+recNames+"  "+g[0]+" "+g[2]+" x"+bn(qty),{me:1,gf:1,lv:level(),pic:mp.pic||null});
+  try{
+    AkiraBridge.toApp({t:"gift",g:g[0],n:qty*rec.length});
+    AkiraBridge.toApp({t:"live-banner",kind:"gift",senderName:mp.name||"You",senderId:mp.id||"100001",senderPic:mp.pic||null,senderEmoji:"👑",recipientName:recNames,giftIcon:g[0],giftName:g[2],qty:qty*rec.length,amount:cost});
+  }catch(e){}
+  rec.forEach(function(r,ri){var se=seatEl(r);if(se)se.scrollIntoView({block:"nearest"});for(var k=0;k<qty;k++)fly(g[0],r,ri*180+k*140,g[1])});
   if(g[3]===2)setTimeout(function(){luckyFx(win,mult,g)},1000);
 }
 function fly(emoji,idx,delay,val){
@@ -274,9 +283,41 @@ function land(el,tx,ty,o,idx,val){
 function gameSheet(){
   var L=[["🎲","Ludo"],["🎯","Carrom"],["🎡","Food Wheel"],["🎰","Jackpot Fruit"],["🃏","Card"],["⭕","Tic-Tac"],["🧠","Memory"],["🎁","Lucky Spin"]];
   open('<h3>🎮 Games</h3><div class="gifts">'+L.map(function(g){return'<div class="gf" style="color:#fff"><span>'+g[0]+'</span>'+g[1]+'</div>'}).join("")+'</div>');
-  $("sheet").querySelectorAll(".gf").forEach(function(b){b.onclick=function(){var t=b.textContent;close();if(/Food Wheel|Jackpot Fruit/.test(t)){window.parent.postMessage({type:"akira:open-game",game:/Food Wheel/.test(t)?"food-wheel":"jackpot-fruit"},window.location.origin);return}if(window.__minor&&/Slot|Spin|Card/.test(t)){toast("This game is closed for users under 18");return}toast(t+" Coming soon")}})
+  $("sheet").querySelectorAll(".gf").forEach(function(b){b.onclick=function(){var t=b.textContent;close();if(/Food Wheel|Jackpot Fruit/.test(t)){window.parent.postMessage({type:"akira:open-game",game:/Jackpot Fruit/.test(t)?"jackpot-fruit":"food-wheel"},"*");return}if(window.__minor&&/Slot|Spin|Card/.test(t)){toast("This game is closed for users under 18");return}toast(t+" Coming soon")}})
 }
-function msgSheet(){open('<h3>💬 Messages</h3><div class="row"><div>🧑‍🎤 Rafi<small>Coming tonight?</small></div><small>2m</small></div><div class="row"><div>👩‍🦰 Nusrat<small>Thanks for the gift 💜</small></div><small>10m</small></div><div class="row"><div>🎧 Customer service<small>Your request has been received</small></div><small>1h</small></div>')}
+function msgSheet(){
+  var list=[
+    {id:"100002",n:"Rafi",e:"🧑‍🎤",msg:"Coming tonight?",t:"2m"},
+    {id:"100145",n:"Nusrat",e:"👩‍🦰",msg:"Thanks for the gift 💜",t:"10m"},
+    {id:"Customer service",n:"Customer service",e:"🎧",msg:"Tell us your problem, we will help",t:"Now"}
+  ];
+  function draw(items){
+    open('<h3>💬 Direct Messages</h3><div id="rmMsgList">'+items.map(function(x,i){
+      var av=x.pic?'<img src="'+esc(x.pic)+'" style="width:36px;height:36px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:8px">':('<span style="font-size:22px;margin-right:8px">'+(x.e||"👤")+'</span>');
+      return'<div class="row" data-rmi="'+i+'" style="cursor:pointer"><div style="display:flex;align-items:center">'+av+'<div><b>'+esc(x.n)+'</b><small style="display:block;color:var(--mu)">'+esc(x.msg)+'</small></div></div><small>'+esc(x.t)+'</small></div>';
+    }).join("")+'</div>');
+    $("sheet").querySelectorAll("[data-rmi]").forEach(function(r){
+      r.onclick=function(){
+        var it=items[+r.dataset.rmi];
+        close();
+        AkiraBridge.toApp({t:"chat",u:{id:it.id,n:it.n,pic:it.pic||null,e:it.e||"👤"}});
+      };
+    });
+  }
+  draw(list);
+  try{
+    var ctx=AkiraBridge.getContext();
+    if(ctx&&ctx.voiceAuth&&ctx.voiceApi){
+      var base=ctx.voiceApi.replace(/\/$/,'').replace(/\/api\/v1$/,'')+'/api/v1';
+      fetch(base+'/community/messages',{headers:{Authorization:'Bearer '+ctx.voiceAuth}}).then(function(r){return r.json()}).then(function(d){
+        if(d&&Array.isArray(d.threads)&&d.threads.length){
+          var srv=d.threads.map(function(t){return{id:String(t.peerId),n:t.name||("ID "+t.peerId),pic:t.pic||null,e:"👤",msg:t.lastBody||"Tap to chat",t:"Live"}});
+          if($("bg").classList.contains("on")&&$("rmMsgList"))draw(srv.concat(list.slice(-1)));
+        }
+      }).catch(function(){});
+    }
+  }catch(_){}
+}
 $("roomBtn").onclick=settings;$("rrpill").onclick=rewardSheet;rrPill();$("bGift").onclick=giftSheet;$("bGame").onclick=gameSheet;$("bMsg").onclick=msgSheet;$("bOwn").onclick=ownSheet;
 $("exit").onclick=function(){open('<h3>Leave the room?</h3><div class="acts" style="grid-template-columns:1fr 1fr"><button class="act" id="y1"><span>🚪</span>Leave</button><button class="act" id="n1"><span>↩️</span>Stay</button></div>');$("y1").onclick=function(){AkiraBridge.toApp({t:"exit"})};$("n1").onclick=close};
 $("min").onclick=function(){AkiraBridge.toApp({t:"min"})};
@@ -310,7 +351,7 @@ function seatEmoji(idx,e){
     s.animate([{transform:"translate("+(cx+(k-2)*8)+"px,"+(cy-sz/2)+"px) translate(-50%,-50%) scale(.5)",opacity:0},{opacity:1,offset:.2},{transform:"translate("+(cx+dx)+"px,"+(cy-sz/2-56-k*7)+"px) translate(-50%,-50%) scale(1.1)",opacity:0}],{duration:1300,delay:350+k*140,easing:"ease-out",fill:"both"}).onfinish=function(){this.effect.target.remove()};}
 }
 var UN=["Arif","Sumi","Hasan","Lima","Ronnie","Jui","Shakil","Tamanna","Emon","Nazma","Rifat","Pinky","Sohel","Mou","Zahid","Rumi","Nayan","Shiuli","Kamal","Rain"],UE=["🧑","👩","🧔","👧","🧑‍💻","👩‍🎓","🧑‍🚀","👩‍🍳","🧑‍🔧","👩‍⚕️","😎","🧑‍🎤"],U=[],FOL={};
-function sid(s){if(s.real&&s.id)return String(s.id);return s.i===0?$("rid").textContent:String(20000000+(s.n.charCodeAt(0)*7919+s.i*104729)%9000000)}
+function sid(s){return s.i===0?$("rid").textContent:String(20000000+(s.n.charCodeAt(0)*7919+s.i*104729)%9000000)}
 function total(){return seats.filter(function(s){return !s.empty&&!s.lock}).length+U.length}
 function usersSheet(q){
   open('<h3>👥 You are in a room <span id="utt">'+bn(total())+'</span> people</h3><input class="field" id="uq" placeholder="Search by name or ID" autocomplete="off"><div class="ul" id="ul"></div>');
@@ -330,12 +371,25 @@ function fillUsers(q){
 }
 function userSheet(u,q){
   var onmic=u.seat!=null,me=u.seat===0,fo=!!FOL[u.id];
-  open('<div class="who"><div class="ua" style="width:60px;height:60px;font-size:30px;background:linear-gradient(145deg,'+COL[(onmic?u.seat:u.k)%COL.length]+')">'+u.e+'</div><div><b style="font-size:16px">'+esc(u.n)+' <span class="lv">Lv'+bn(u.lv)+'</span></b><small style="display:block;color:var(--mu);margin-top:3px">🆔 '+u.id+'</small></div></div><div class="acts"><button class="act" data-a="cp"><span>📋</span>ID Copy</button><button class="act" data-a="pf"><span>👤</span>Profile</button>'+(me?"":'<button class="act" data-a="fo"><span>'+(fo?"✅":"➕")+'</span>'+(fo?"Following":"Follow")+'</button><button class="act" data-a="gf"><span>🎁</span>Gift</button>'+(onmic?'<button class="act" data-a="dn"><span>⬇️</span>Remove from mic</button>':'<button class="act" data-a="iv"><span>🎤</span>Invite to mic</button>')+'<button class="act dg" data-a="kk"><span>🚫</span>Kick out</button>')+'</div><button class="back" id="ubk" style="margin-top:12px;width:auto;padding:0 14px;height:34px">‹ Back to list</button>');
+  open('<div class="who"><div class="ua" style="width:60px;height:60px;font-size:30px;background:linear-gradient(145deg,'+COL[(onmic?u.seat:u.k)%COL.length]+')">'+u.e+'</div><div><b style="font-size:16px">'+esc(u.n)+' <span class="lv">Lv'+bn(u.lv)+'</span></b><small style="display:block;color:var(--mu);margin-top:3px">🆔 '+u.id+'</small></div></div><div class="acts"><button class="act" data-a="cp"><span>📋</span>ID Copy</button><button class="act" data-a="pf"><span>👤</span>Profile</button>'+(me?"":'<button class="act" data-a="fo"><span>'+(fo?"✅":"➕")+'</span>'+(fo?"Following":"Follow")+'</button><button class="act" data-a="msg"><span>💬</span>Message</button><button class="act" data-a="gf"><span>🎁</span>Gift</button>'+(onmic?'<button class="act" data-a="dn"><span>⬇️</span>Remove from mic</button>':'<button class="act" data-a="iv"><span>🎤</span>Invite to mic</button>')+'<button class="act dg" data-a="kk"><span>🚫</span>Kick out</button>')+'</div><button class="back" id="ubk" style="margin-top:12px;width:auto;padding:0 14px;height:34px">‹ Back to list</button>');
   $("ubk").onclick=function(){usersSheet(q)};
   $("sheet").querySelectorAll(".act").forEach(function(b){b.onclick=function(){var a=b.dataset.a;
     if(a==="cp"){try{navigator.clipboard.writeText(u.id);toast("ID Copied ✓")}catch(e){toast("ID: "+u.id)}}
     if(a==="pf"){AkiraBridge.toApp({t:"profile",u:u});close()}
-    if(a==="fo"){FOL[u.id]=!FOL[u.id];userSheet(u,q)}
+    if(a==="msg"){AkiraBridge.toApp({t:"chat",u:u});close()}
+    if(a==="fo"){
+      FOL[u.id]=!FOL[u.id];
+      try{
+        AkiraBridge.toApp({t:"follow",u:u,following:FOL[u.id]});
+        var ctx=AkiraBridge.getContext();
+        if(ctx&&ctx.voiceAuth&&ctx.voiceApi&&/^\d+$/.test(String(u.id))){
+          var base=ctx.voiceApi.replace(/\/$/,'').replace(/\/api\/v1$/,'')+'/api/v1';
+          fetch(base+'/community/follow',{method:'POST',headers:{Authorization:'Bearer '+ctx.voiceAuth,'Content-Type':'application/json'},body:JSON.stringify({targetId:String(u.id),action:FOL[u.id]?'follow':'unfollow'})}).catch(function(){});
+        }
+      }catch(_){}
+      toast(FOL[u.id]?("Following "+u.n+" ✓"):("Unfollowed "+u.n));
+      userSheet(u,q);
+    }
     if(a==="gf"){if(onmic){rec=[u.seat];giftSheet()}else toast("Gifts can be sent once you are on the mic")}
     if(a==="iv"){var e=-1;seats.forEach(function(s,k){if(e<0&&s.empty)e=k});if(e<0){toast("No empty seats");return}U.splice(u.k,1);seats[e]={n:u.n,e:u.e,i:e,muted:false,talk:false};sys(u.n+" joined the mic");close();render();toast(u.n+" took a seat")}
     if(a==="dn"){U.unshift({n:u.n,e:u.e,id:u.id,lv:u.lv});seats[u.seat]={empty:1,i:u.seat};sys(u.n+" left the mic");close();render()}
@@ -346,14 +400,14 @@ $("ustat").onclick=function(){usersSheet("")};
 function lockSheet(){var need=(S.minLv-1)*1000,p=Math.max(0,Math.min(100,Math.round(S.xp/need*100)));
   open('<h3>🔒 Photo sending is locked</h3><div style="font-size:13.5px;line-height:1.7">To send gallery photos in the room you need at least <b style="color:var(--gold)">Level '+bn(S.minLv)+'</b> required. You are now <b>Level '+bn(level())+'</b>.</div><div class="pbar"><i style="width:'+p+'%"></i></div><div class="lbl">Send gifts to level up</div><div class="gbar"><button class="send" id="lg">🎁 Send gift</button></div>');
   $("lg").onclick=giftSheet}
-function sendImg(){if(chatOff){toast("Chat is off");return}if(level()<S.minLv){lockSheet();return}pickImage(800,function(d){msg("You","😎","",{me:1,ci:0,lv:level(),img:d})})}
+function sendImg(){if(chatOff){toast("Chat is off");return}if(level()<S.minLv){lockSheet();return}var mp=window.__myProfile||{};pickImage(800,function(d){msg(mp.name||"You","😎","",{me:1,ci:0,lv:level(),img:d,pic:mp.pic||null})})}
 function view(src){$("vimg").src=src;$("viewer").classList.add("on")}
 $("viewer").onclick=function(){this.classList.remove("on")};
 $("imgBtn").onclick=sendImg;
 $("chat").onscroll=function(){if(this.scrollHeight-this.scrollTop-this.clientHeight<60)$("newb").style.display="none"};
 $("newb").onclick=function(){var c=$("chat");c.scrollTop=c.scrollHeight;this.style.display="none"};
-try{var W=AkiraBridge.getContext()||{};if(W.name){S.name=W.name;S.theme=W.theme||S.theme;S.pic=null;S.bg=null;window.__em=W.emoji;window.__minor=!!W.minor;if(W.id)$("rid").textContent=W.id}}catch(e){}
-window.__akiraIsOwner=!!(W.ownerId&&W.userId&&String(W.ownerId)===String(W.userId));var ownerButton=document.getElementById("bOwn");if(ownerButton)ownerButton.style.display=window.__akiraIsOwner?"":"none";applyTheme();render();setChat(true);updBtn();akiraStartVoice();AkiraBridge.onRoom(function(d){if(d.t==="gift"){if(d.seat>0)rec=[d.seat];giftSheet()}});
+try{var W=AkiraBridge.getContext()||{};if(W.profile)window.__myProfile=W.profile;if(W.name){S.name=W.name;S.theme=W.theme||S.theme;S.pic=W.pic||null;S.bg=W.bg||null;window.__em=W.emoji;window.__minor=!!W.minor;if(W.id)$("rid").textContent=W.id}}catch(e){}
+window.__akiraIsOwner=Boolean(W.isOwner||(W.ownerId&&W.userId&&String(W.ownerId)===String(W.userId)));var ownerButton=document.getElementById("bOwn");if(ownerButton)ownerButton.style.display=window.__akiraIsOwner?"":"none";applyTheme();render();setChat(true);updBtn();akiraStartVoice();AkiraBridge.onRoom(function(d){if(d.t==="gift"){if(d.seat>0)rec=[d.seat];giftSheet()}if(d.t==="wallet-sync"&&typeof d.coins==="number"){S.coins=d.coins;lockUI()}});
 sys("Welcome to the room");
 setInterval(function(){tick(false)},1600);
 
@@ -364,3 +418,98 @@ window.AkiraRoom={closeTopLayer:function(){
   if($("tray").classList.contains("on")){$("tray").classList.remove("on");return true}
   return false;
 }};
+
+/* Sync visual Gift Sheet, Lucky Gifts, Room Rewards & Themes with Server Wallet & Admin Catalog. */
+(function(){
+ const ctx=AkiraBridge.getContext();if(!ctx?.voiceAuth)return;
+ const base=ctx.voiceApi.replace(/\/$/,'').replace(/\/api\/v1$/,'')+'/api/v1';
+ async function api(path,b){const r=await fetch(base+path,{method:b?'POST':'GET',headers:{Authorization:'Bearer '+ctx.voiceAuth,'Content-Type':'application/json'},...(b?{body:JSON.stringify(b)}:{})});const d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d;}
+ function syncCatalogGifts(){
+  api('/community/catalog').then(d=>{
+   if(!d||!Array.isArray(d.items))return;
+   d.items.filter(x=>x.kind==='gift').forEach(it=>{
+    const price=Number(it.price)||10;
+    const icon=(it.asset&&it.asset.length<=8&&!/^https?:|^data:/.test(it.asset))?it.asset:'🎁';
+    const tabIdx=price>=1000?1:0;
+    const found=G.find(g=>String(g[2]).toLowerCase()===String(it.name).toLowerCase());
+    if(found){found[1]=price;found[0]=icon;found[4]=it.id;}
+    else{G.push([icon,price,it.name,tabIdx,it.id]);}
+   });
+  }).catch(()=>{});
+ }
+ api('/wallet').then(d=>{if(d?.wallet&&Number.isSafeInteger(Number(d.wallet.balance))){S.coins=Number(d.wallet.balance);lockUI();}}).catch(()=>{});
+ syncCatalogGifts();
+ const origGiftSheet=giftSheet;
+ giftSheet=function(){
+  api('/wallet').then(d=>{if(d?.wallet&&Number.isSafeInteger(Number(d.wallet.balance))){S.coins=Number(d.wallet.balance);lockUI();}}).catch(()=>{});
+  syncCatalogGifts();
+  origGiftSheet();
+ };
+ $('bGift').onclick=giftSheet;
+ sendGift=async function(){
+  var g=G[gsel],totalQty=qty*rec.length,cost=g[1]*totalQty;
+  if(g[3]===2&&window.__minor){toast("Lucky gifts are closed for users under 18");return;}
+  if(cost>S.coins){toast("Not enough coins");return;}
+  var before=level(),win=0,mult=0;
+  if(g[3]===2){for(var k=0;k<totalQty;k++){var m=luckyRoll();mult=Math.max(mult,m);win+=m*g[1];}}
+  var firstSeat=seats[rec[0]]||{};
+  var recipientId=firstSeat.id||sid(firstSeat)||ctx.userId||'100001';
+  var reqKey='rg-'+Date.now()+'-'+Math.random().toString(36).slice(2,10);
+  try{
+   var res=await api('/community/gift',{
+    itemId:g[4]||undefined,
+    giftName:g[2],
+    giftIcon:g[0],
+    price:g[1],
+    quantity:totalQty,
+    recipientId:String(recipientId),
+    luckyWin:win,
+    requestId:reqKey
+   });
+   if(res&&res.balance!==undefined)S.coins=Number(res.balance);
+   else S.coins=Math.max(0,S.coins-cost+win);
+   window.parent.postMessage({type:'akira:wallet-updated',balance:S.coins},location.origin);
+   try{AkiraBridge.toApp({t:'coins',coins:S.coins});}catch(_){}
+  }catch(e){
+   toast(e.message||'Could not send gift');
+   return;
+  }
+  S.xp+=cost;rewardAdd(cost);
+  save();close();lockUI();
+  if(level()>before){sys("🎉 Level up! Now Level "+bn(level()));if(before<S.minLv&&level()>=S.minLv)sys("🖼️ Photo sending unlocked!");}
+  var mp=window.__myProfile||ctx.profile||{name:"You",id:ctx.userId||"100001",pic:null};
+  var recNames=rec.map(function(i){return seats[i].n;}).join(", ");
+  msg(mp.name||"You","😎","→ "+recNames+"  "+g[0]+" "+g[2]+" x"+bn(qty),{me:1,gf:1,lv:level(),pic:mp.pic||null});
+  try{
+   AkiraBridge.toApp({t:"gift",g:g[0],n:totalQty});
+   AkiraBridge.toApp({t:"live-banner",kind:"gift",senderName:mp.name||"You",senderId:mp.id||ctx.userId||"100001",senderPic:mp.pic||null,senderEmoji:"👑",recipientName:recNames,giftIcon:g[0],giftName:g[2],qty:totalQty,amount:cost});
+   if(win>0){
+    AkiraBridge.toApp({t:"live-banner",kind:"win",name:mp.name||"You",user_id:mp.id||ctx.userId||"100001",pic:mp.pic||null,amount:win,game:"Lucky Gift x"+mult});
+   }
+  }catch(_){}
+  rec.forEach(function(r,ri){var se=seatEl(r);if(se)se.scrollIntoView({block:"nearest"});for(var k=0;k<qty;k++)fly(g[0],r,ri*180+k*140,g[1]);});
+  if(g[3]===2)setTimeout(function(){luckyFx(win,mult,g);},1000);
+ };
+ const origRewardSheet=rewardSheet;
+ rewardSheet=function(){
+  origRewardSheet();
+  var claimBtn=$('rwclaim');
+  if(claimBtn){
+   claimBtn.onclick=async function(){
+    var x=rrInfo();
+    if(!x.can){toast(x.left>0?"Next claim in "+fmtLeft(x.left):"No reward yet");return;}
+    try{
+     var res=await api('/community/room-reward',{amount:x.rw,requestId:'rr-'+Date.now()+'-'+Math.random().toString(36).slice(2,10)});
+     if(res&&res.balance!==undefined)S.coins=Number(res.balance);
+     else S.coins+=x.rw;
+     window.parent.postMessage({type:'akira:wallet-updated',balance:S.coins},location.origin);
+    }catch(_){S.coins+=x.rw;}
+    var r=rrS();r.vol=0;r.last=Date.now();save();lockUI();rewardSheet();
+    toast("+"+x.rw+" coins claimed 💰");sys("💰 Room Reward claimed: +"+x.rw+" coins");
+   };
+  }
+ };
+ $('rrpill').onclick=rewardSheet;
+ const originalTheme=themeSheet;
+ themeSheet=async function(){originalTheme();try{const data=await api('/community/inventory');const themes=data.items.filter(x=>x.kind==='theme');themes.forEach(t=>{const b=document.createElement('button');b.textContent=t.name;b.className='row';b.onclick=async()=>{try{await api('/community/equip',{itemId:t.item_id});S.bg=t.asset;save();applyTheme();toast('Theme applied on this device');}catch(e){toast(e.message);}};$('sheet').append(b);});}catch(e){}};
+})();

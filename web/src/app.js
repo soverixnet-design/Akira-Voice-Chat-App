@@ -296,13 +296,14 @@ function pfWire(root,m,mine){
     q("#pe",editSheet);q("#wr",rechargeSheet);
     root.querySelectorAll("[data-m]").forEach(function(b){b.onclick=function(){var k=b.dataset.m;
       if(k==="home"){$("pfo").classList.remove("on");if(A.myRoom)openRoom(myR());else createSheet()}
-      else if(k==="daily")dailySheet();else if(k==="invite")inviteSheet();else if(k==="recharge")rechargeSheet();else if(k==="set")settingsSheet();else toast("This section is coming soon")}});
+      else if(k==="daily")dailySheet();else if(k==="invite")inviteSheet();else if(k==="recharge")rechargeSheet();else if(k==="set")settingsSheet();else if(k==="frame"||k==="entry"||k==="store")window.akiraEquipment?.open(k==="entry"?"entry":"frame");else toast("This section is coming soon")}});
   }else{
     q("#pfol",function(){A.fol[m.id]=!A.fol[m.id];saveA();rr()});
     q("#pmsg",function(){openThread([m.n,m.e,"👋 Hi!","Now"])});
     q("#pgift",function(){if($("rw").classList.contains("on")&&m.u&&$("rf").contentWindow){$("pfo").classList.remove("on");AkiraBridge.toRoom({t:"gift",seat:m.u.seat})}else toast("Enter a room and send gifts 🎁")});
     q("#pmore",function(){openSheet('<h3>'+esc(m.n)+'</h3><div class="acts"><button class="act" id="rp1"><span>🚩</span>Report</button><button class="act" id="bl1"><span>🚫</span>Block</button><button class="act" id="cp1"><span>📋</span>ID Copy</button></div>');$("rp1").onclick=function(){closeSheet();toast("Report sent")};$("bl1").onclick=function(){closeSheet();toast("Blocked")};$("cp1").onclick=function(){closeSheet();toast("ID: "+m.id)}});
   }
+  window.akiraEquipment?.decorate?.(root,m,mine);
 }
 function meHTML(m){
   var av=m.pic?'style="background-image:url('+m.pic+')"':'';
@@ -399,7 +400,7 @@ function enter(a,msg){
   A=Object.assign({name:"Me",pic:null,myRoom:null,claim:{d:"",streak:0}},a.p);fixA();try{localStorage.setItem("vr_app_v1",JSON.stringify(A))}catch(e){}
   window.__akiraAuthVerified=true;
   document.documentElement.classList.add("akira-auth-verified");
-  hideAuth();refresh();renderRooms();loadAkiraRooms();go("home");toast(msg);
+  hideAuth();refresh();renderRooms();loadAkiraRooms();go("home");if(window.akiraEquipment)window.akiraEquipment.refresh().catch(function(){});toast(msg);
 }
 function authRender(){
   $("au").classList.toggle("w",amode==="welcome");
@@ -457,7 +458,7 @@ async function doSignup(){
   var b=$("ago");b.disabled=true;
   var r=await API.signup({name:name,key:key,pw:pw,country:c,dob:yy+"-"+String(m+1).padStart(2,"0")+"-"+String(dd).padStart(2,"0"),pic:apic,age:age});
   b.disabled=false;if(!r.ok)return aerr(r.msg);apic=null;
-  enter(r.acct,"Welcome, "+name+"! +"+bn(2000)+" Coin gift 🎁");
+  enter(r.acct,"Welcome, "+name+"! Your coins will reflect verified rewards only.");
 }
 function mask(k){if(k.indexOf("@")>0){var p=k.split("@");return p[0].slice(0,2)+"***@"+p[1]}return"***"+k.slice(-3)}
 
@@ -501,6 +502,7 @@ async function akiraRestoreSession(){
     document.documentElement.classList.add("akira-auth-verified");
     $("au").classList.remove("on");
     refresh();renderRooms();await loadAkiraRooms();go("home");
+    if(window.akiraEquipment)window.akiraEquipment.refresh().catch(function(){});
   }catch(e){
     // A network outage never means a logged-out visitor may view the home screen.
     window.__akiraAuthVerified=false;

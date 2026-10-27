@@ -185,24 +185,10 @@ export async function controlRoutes(req,url,send){
     });
     send(200,result);return true;
    }
-   if(req.method==='POST'&&section==='daily-checkin'){
-    const b=await body(req),day=new Date().toISOString().slice(0,10);
-    const amt=Math.max(100,Math.min(1000,Number(b.amount)||100));
-    const r=await transaction(async c=>{
-     await c.query('SELECT id FROM akira_users WHERE id=$1 FOR UPDATE',[user.id]);
-     const wd=await walletDelta(c,user.id,amt,'daily:'+user.id+':'+day,'daily_checkin');
-     return{ok:true,balance:wd.balance,duplicate:wd.duplicate,amount:amt};
-    });send(200,r);return true;
-   }
-   if(req.method==='POST'&&section==='room-reward'){
-    const b=await body(req),key=requestKey(b);
-    const amt=Math.max(1,Math.min(500000,Math.floor(Number(b.amount)||0)));
-    if(!amt)throw fail('invalid_reward_amount');
-    const r=await transaction(async c=>{
-     await c.query('SELECT id FROM akira_users WHERE id=$1 FOR UPDATE',[user.id]);
-     const wd=await walletDelta(c,user.id,amt,'room-reward:'+key,'room_reward');
-     return{ok:true,balance:wd.balance};
-    });send(200,r);return true;
+   // Legacy handlers accepted client-supplied rewards and could mint arbitrary coins.
+   // Dedicated server-authoritative rewards are handled in server.mjs.
+   if(req.method==='POST'&&(section==='daily-checkin'||section==='room-reward')){
+    throw fail('use_verified_reward_endpoint',410);
    }
    if(req.method==='POST'&&section==='transfer'){
     const b=await body(req),key=requestKey(b);if(!ident(b.recipientId)||!Number.isSafeInteger(b.amount)||b.amount<=0)throw fail('invalid_transfer');

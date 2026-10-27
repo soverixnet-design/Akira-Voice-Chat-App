@@ -115,9 +115,38 @@ $("plus").onclick=function(){if(A.myRoom)openRoom(myR());else createSheet()};
 var DR=[100,150,200,300,400,600,1000];
 function today(){return new Date().toISOString().slice(0,10)}
 function dailySheet(){
-  var done=A.claim.d===today(),st=A.claim.streak%7;
-  openSheet('<h3>🎁 Daily check-in</h3><div class="g4">'+DR.map(function(v,i){return'<button class="'+(i===st&&!done?"sel":"")+'" style="'+(i<st||(done&&i===(st+6)%7)?"opacity:.5":"")+'"><span>'+(i===6?"🎁":"🪙")+'</span>Day '+bn(i+1)+'<br>'+bn(v)+'</button>'}).join("")+'</div><button class="big" id="cl" '+(done?"disabled style=\"opacity:.5\"":"")+'>'+(done?"Today reward already claimed ✓":"🪙 "+bn(DR[st])+" Get coins")+'</button>');
-  if(!done)$("cl").onclick=function(){var v=DR[st];A.claim={d:today(),streak:A.claim.streak+1};saveA();addCoins(v);closeSheet();toast("+"+bn(v)+" coins received 🎉")};
+  openSheet('<h3>🎁 Daily check-in</h3><p style="padding:12px">Checking verified daily coin rewards…</p>');
+  var token=typeof window.akiraToken==='function'?window.akiraToken():'';
+  if(!token||typeof window.akiraRequest!=='function'){
+    openSheet('<h3>🎁 Daily check-in</h3><p>Sign in to claim coins to your real wallet.</p>');
+    return;
+  }
+  function showStatus(d){
+    var amounts=Array.isArray(d.amounts)&&d.amounts.length===7?d.amounts:DR;
+    var day=Math.min(7,Math.max(1,Number(d.streak)||1)),done=d.claimed===true;
+    var tiles=amounts.map(function(v,i){
+      return '<button type="button" class="'+(i+1===day?'sel':'')+'" style="'+(i+1<day?'opacity:.65':'')+'"><span>'+(i===6?'🎁':'🪙')+'</span>Day '+bn(i+1)+'<br>🪙 '+bn(v)+'</button>';
+    }).join('');
+    openSheet('<h3>🎁 Daily check-in</h3><div class="g4">'+tiles+'</div>'+
+      '<p style="padding:8px 12px;font-size:12px">Server resets at 00:00 UTC. Day '+day+
+      (done?' claimed today.':' available today.')+'</p>'+
+      '<button class="big" id="cl" '+(done?'disabled style="opacity:.55"':'')+'>'+
+      (done?'Today reward already claimed ✓':'🪙 '+bn(d.nextReward||amounts[day-1])+' Claim real coins')+'</button>');
+    if(!done)$("cl").onclick=async function(){
+      var button=$("cl");if(!button||button.disabled)return;button.disabled=true;
+      try{
+        var result=await window.akiraRequest('/api/v1/rewards/daily','POST',{},token);
+        if(!result||!result.ok)throw Error('Reward not confirmed');
+        toast(result.alreadyClaimed?'Already claimed today ✓':'+'+bn(result.amount)+' real coins received 🎉');
+        window.dispatchEvent(new Event('akira:wallet-updated'));
+        if(typeof window.akiraRefreshWallet==='function')void window.akiraRefreshWallet();
+        dailySheet();
+      }catch(err){button.disabled=false;toast('Reward: '+(err.message||'Server unavailable'))}
+    };
+  }
+  window.akiraRequest('/api/v1/rewards/daily','GET',undefined,token)
+    .then(function(d){if(!d||!d.ok)throw Error('Daily rewards unavailable');showStatus(d)})
+    .catch(function(err){openSheet('<h3>🎁 Daily check-in</h3><p style="padding:12px">Real daily rewards are not available: '+esc(err.message||'Server unavailable')+'</p>')});
 }
 var RCT=0,RATE=1,N=function(n){return Number(n).toLocaleString("en-US")};
 function addDia(n){var s=ls("vr_state_v2",{});s.dia=(s.dia==null?2500:s.dia)+n;try{localStorage.setItem("vr_state_v2",JSON.stringify(s))}catch(e){}refresh()}
@@ -150,9 +179,18 @@ function sellerSheet(){
 }
 $("hc").onclick=function(){rechargeSheet()};
 function inviteSheet(){
-  var url="https://example.com/?ref="+A.id;
-  openSheet('<h3>🤝 Invite a friend</h3><div style="font-size:13.5px;line-height:1.7">When someone recharges through your invite, you earn a <b style="color:var(--gold)">5% Reward</b>.</div><div class="idp" style="margin-top:12px">Invite code: <b>'+A.id+'</b></div><button class="big" id="sv">📤 Share</button>');
-  $("sv").onclick=function(){var t="Join me on Akira Voice Chat App! Code: "+A.id;if(navigator.share){navigator.share({text:t,url:url}).catch(function(){})}else{try{navigator.clipboard.writeText(t+" "+url);toast("Link copied ✓")}catch(e){toast("Code: "+A.id)}}};
+  var url='https://voice.soverixnet.online/';
+  openSheet('<h3>🤝 Invite a friend</h3><div style="font-size:13.5px;line-height:1.7">'+
+    'Share the Akira home page with friends. Invite tracking and rewards are not enabled yet; no referral coins are promised.'+
+    '</div><div class="idp" style="margin-top:12px">Your ID: <b>'+esc(A.id)+'</b></div>'+
+    '<div style="padding:10px 0;font-size:13px">Verified invites: Not available yet</div>'+
+    '<button class="big" id="sv">📤 Share Akira</button>');
+  $("sv").onclick=function(){
+    var t='Join me on Akira Voice Chat App! '+url;
+    if(navigator.share)navigator.share({text:t,url:url}).catch(function(){});
+    else if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(function(){toast('Link copied ✓')}).catch(function(){toast(url)});
+    else toast(url);
+  };
 }
 $("qd").onclick=dailySheet;$("qr").onclick=rechargeSheet;$("qi").onclick=inviteSheet;$("qg").onclick=function(){toast("Enter a room and play games 🎮")};
 /* ===== Ranking ===== */

@@ -65,7 +65,7 @@
       '<div class="lbl">Available Gifts from Admin</div>'+
       '<div class="gifts" style="max-height:230px;overflow-y:auto">'+gifts.map(function(g){
        return '<button type="button" class="gf'+(String(g.id)===selectedGift?' sel':'')+'" data-giftid="'+escrow(g.id)+'">'+
-        '<span>'+( /^https:\/\/[^\\s<>\"']+$/.test(String(g.asset||''))?'<img alt="" loading="lazy" style="width:42px;height:42px;object-fit:contain" src="'+escrow(g.asset)+'">':/^(?!https?:|data:).{1,8}$/.test(String(g.asset||''))?escrow(g.asset):'🎁')+'</span>'+
+        '<span>'+( /^https:\/\/[^\s<>\"']+$/.test(String(g.asset||''))?'<img alt="" loading="lazy" style="width:42px;height:42px;object-fit:contain" src="'+escrow(g.asset)+'">':/^(?!https?:|data:).{1,8}$/.test(String(g.asset||''))?escrow(g.asset):'🎁')+'</span>'+
         '<b>'+escrow(g.name)+'</b><small>🪙 '+money(g.price)+'</small></button>';
       }).join('')+'</div>'+
       (gifts.length?'':'<div class="lbl">Admin has not enabled any paid gifts.</div>')+

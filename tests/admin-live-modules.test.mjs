@@ -51,5 +51,6 @@ test('new Admin schema adds tables without destroying existing accounts or coins
   }
   assert.match(schema,/BEGIN;/);
   assert.match(schema,/COMMIT;/);
-  assert.doesNotMatch(schema,/\b(?:DROP|TRUNCATE|DELETE FROM akira_wallets|UPDATE akira_wallets)\b/i);
+  const statements=schema.split('\n').filter(line=>!line.trimStart().startsWith('--')).join('\n');
+  assert.doesNotMatch(statements,/\b(?:DROP|TRUNCATE|DELETE FROM akira_wallets|UPDATE akira_wallets)\b/i);
 });

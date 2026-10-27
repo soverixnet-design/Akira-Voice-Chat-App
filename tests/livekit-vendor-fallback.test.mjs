@@ -11,5 +11,7 @@ test('room JavaScript parses and loads pinned LiveKit SDK before voice token',()
   assert.match(room,/await akiraEnsureVoiceSdk\(\)/);
   assert.match(room,/window\.__akiraVoiceSdkPromise=null;throw err/);
   assert.match(room,/RoomEvent\.TrackSubscribed/);
+  assert.match(room,/akira:voice-connected/);
+  assert.match(room,/Microphone permission needed; listening is still active/);
   assert.match(room,/localParticipant\.setMicrophoneEnabled/);
 });

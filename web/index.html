@@ -9,6 +9,19 @@
 <link rel="apple-touch-icon" href="assets/art-0cdad6e0e628.png">
 <link rel="stylesheet" href="styles/app.css">
 <link rel="stylesheet" href="styles/viewport.css">
+<style>
+/* Hide every app surface until /api/v1/auth/me validates the Akira session. */
+html:not(.akira-auth-verified) #app .views,
+html:not(.akira-auth-verified) #app .nav,
+html:not(.akira-auth-verified) #app .roomwrap,
+html:not(.akira-auth-verified) #app .mini,
+html:not(.akira-auth-verified) #app .thread,
+html:not(.akira-auth-verified) #app .pfo,
+html:not(.akira-auth-verified) #app .rcp,
+html:not(.akira-auth-verified) #app .shb {
+  visibility:hidden!important;pointer-events:none!important;
+}
+</style>
 </head>
 <body data-page="app">
 <div class="app" id="app">

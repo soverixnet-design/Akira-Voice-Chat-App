@@ -84,7 +84,7 @@ function loginPage(){token='';role='';root.innerHTML='';const screen=el('div','l
 function renderShell(){root.innerHTML='';const shell=el('div','app');shell.id='shell';const nav=el('nav');nav.id='nv';const brand=el('div','br');const logo=el('div','brand-icon','✦');const label=el('div');label.append(el('b','','Akira'),el('small','','Admin Control Center'));brand.append(logo,label);nav.appendChild(brand);let section='';for(const [group,key,title] of pages){if(group!==section){nav.appendChild(el('div','nav-section',group));section=group}const a=el('a','',title);a.href='#'+key;a.dataset.page=key;a.onclick=e=>{e.preventDefault();render(key);shell.classList.remove('menu-open')};nav.appendChild(a)}
  const main=el('main');const top=el('div','top');top.append(button('☰',()=>shell.classList.toggle('menu-open'),'btn o s'));const heading=el('h2');heading.id='heading';top.appendChild(heading);top.appendChild(el('div','sp'));top.appendChild(el('div','who','Role: '+role));top.append(button('Log out',async()=>{try{await call('/api/v1/auth/logout',{method:'POST'})}catch{}loginPage()},'btn o s'));main.append(top,el('div'));main.lastChild.id='pg';shell.append(nav,main);root.appendChild(shell)
 }
-async function render(page,initial){currentPage=page;document.querySelectorAll('[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));const entry=pages.find(p=>p[1]===page);$('#heading').textContent=entry?.[2]||'Admin';$('#pg').replaceChildren();try{switch(page){case 'dash':await dashPage(initial);break;case 'users':await usersPage();break;case 'sellers':await sellersPage();break;case 'recharge':await rechargePage();break;case 'roles':await rolesPage();break;case 'audit':await auditPage();break;case 'reports':await reportsPage();break;case 'deletion':await deletionPage();break;case 'rooms':await roomsPage();break;case 'games':await gamesPage();break;case 'gifts':await giftPolicyPage();break;case 'settings':await giftPolicyPage();break;case 'store':await catalogPage();break;default:plannedPage()}}catch(err){notice('Unable to load this section: '+err.message)}}
+async function render(page,initial){currentPage=page;document.querySelectorAll('[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));const entry=pages.find(p=>p[1]===page);$('#heading').textContent=entry?.[2]||'Admin';$('#pg').replaceChildren();try{switch(page){case 'dash':await dashPage(initial);break;case 'users':await usersPage();break;case 'sellers':await sellersPage();break;case 'recharge':await rechargePage();break;case 'roles':await rolesPage();break;case 'audit':await auditPage();break;case 'reports':await reportsPage();break;case 'deletion':await deletionPage();break;case 'rooms':await roomsPage();break;case 'games':await gamesPage();break;case 'tasks':await tasksPage();break;case 'promos':await promosPage();break;case 'support':await supportPage();break;case 'banners':await contentPage('banner');break;case 'notifications':await contentPage('notice');break;case 'legal':await contentPage('legal');break;case 'gifts':await giftPolicyPage();break;case 'settings':await giftPolicyPage();break;case 'store':await catalogPage();break;default:plannedPage()}}catch(err){notice('Unable to load this section: '+err.message)}}
 async function dashPage(initial){const data=initial||await call('/api/v1/admin/dashboard');const stats=data.stats||{};const c=card('Live Database Statistics');line(c,'Registered users',stats.users);line(c,'Rooms',stats.rooms);line(c,'Signed-in role',data.role);notice('Only verified API values are displayed. Online users, revenue and game metrics require additional backend endpoints.');const actions=card('Quick Actions');actions.append(button('Find user',()=>render('users')),button('Coin sellers',()=>render('sellers')),button('Wallet recharge',()=>render('recharge')))}
 async function usersPage(){const c=card('Find account by 6-digit ID');const fields=el('div','fields');const uid=input(fields,'User ID','100001');const actions=el('div','controls');const result=el('div');actions.append(button('Search user',async()=>{result.replaceChildren();if(!checkId(uid.value)){result.textContent='Enter a valid 6-digit ID';return}try{const d=await call('/api/v1/admin/users/search?id='+encodeURIComponent(uid.value.trim()));if(!d.user){result.textContent='User not found';return}line(result,'ID',d.user.public_id);line(result,'Name',d.user.display_name);line(result,'Country',d.user.country_code||'-')}catch(e){result.textContent=e.message}}));
  actions.append(button('Recent users',async()=>{result.replaceChildren();try{const d=await call('/api/v1/admin/users');for(const u of d.users||[])line(result,(u.display_name||'User')+' · '+u.public_id,u.country_code||'—')}catch(e){result.textContent=e.message}},'btn o s'));c.append(fields,actions,result);
@@ -257,6 +257,138 @@ async function deletionPage(){
  c.appendChild(el('p','subtle',list.length+' recent requests'));
  if(!list.length)c.appendChild(el('p','','No account deletion requests.'));
  for(const r of list)line(c,String(r.publicId)+' · '+String(r.displayName||'User'),String(r.status)+' · '+new Date(r.requestedAt).toLocaleDateString());
+}
+
+/* Original live Admin API integrations. All writes are Super Admin protected on server. */
+async function tasksPage(){
+ const list=card('Verified Daily Tasks');
+ const data=await call('/api/v1/admin/tasks');
+ const items=data.items||[];
+ list.appendChild(el('p','subtle',items.length+' configured tasks. Claims require actual check-in or paid-gift proof.'));
+ if(!items.length)list.appendChild(el('p','','No tasks configured.'));
+ for(const item of items){
+   const row=el('div','rowline');
+   row.append(el('span','',item.title+' · '+item.action+' · 🪙 '+item.coins),el('strong','',item.enabled?'Enabled':'Disabled'));
+   if(role==='super_admin')row.appendChild(button(item.enabled?'Disable':'Enable',async()=>{
+     if(!confirm((item.enabled?'Disable':'Enable')+' task '+item.title+'?'))return;
+     try{await post('/api/v1/admin/tasks',{action:'set_enabled',id:item.id,enabled:!item.enabled});await render('tasks')}catch(e){notice(e.message)}
+   },'btn o s'));
+   list.appendChild(row);
+ }
+ if(role!=='super_admin')return;
+ const c=card('Create Daily Task — starts disabled');
+ const fields=el('div','fields');
+ const title=input(fields,'Task title','Complete daily check-in');
+ const amount=input(fields,'Reward coins','100','number');
+ const act=el('select');
+ for(const [id,label] of [['daily_checkin','Daily check-in'],['send_paid_gift','Send a paid gift']]){
+   const op=el('option','',label);op.value=id;act.appendChild(op);
+ }
+ const wrap=el('label','','Verified action');wrap.appendChild(act);fields.appendChild(wrap);
+ const msg=el('p','status');
+ c.append(fields,button('Create Disabled Task',async()=>{
+   const coins=Number(amount.value);
+   if(!title.value.trim()||!Number.isSafeInteger(coins)||coins<1||coins>10000){msg.textContent='Enter a title and 1–10,000 coins';return}
+   try{const result=await post('/api/v1/admin/tasks',{action:act.value,title:title.value.trim(),coins,enabled:false,requestId:requestId()});
+     msg.textContent='Task '+result.id+' created (disabled). Enable after reviewing.';await render('tasks');
+   }catch(e){msg.textContent=e.message}
+ }),msg);
+}
+async function promosPage(){
+ const list=card('Verified Promo Codes');
+ const data=await call('/api/v1/admin/promos');
+ const items=data.items||[];
+ list.appendChild(el('p','subtle',items.length+' promo codes in the database.'));
+ if(!items.length)list.appendChild(el('p','','No promo codes yet.'));
+ for(const item of items){
+   const row=el('div','rowline');
+   row.append(el('span','',item.code+' · 🪙 '+item.coins+' · '+item.redeemed_count+'/'+item.max_uses+' used'),
+     el('strong','',item.enabled?'Enabled':'Disabled'));
+   if(role==='super_admin')row.appendChild(button(item.enabled?'Disable':'Enable',async()=>{
+     if(!confirm((item.enabled?'Disable':'Enable')+' code '+item.code+'?'))return;
+     try{await post('/api/v1/admin/promos',{action:'set_enabled',id:item.id,enabled:!item.enabled});await render('promos')}catch(e){notice(e.message)}
+   },'btn o s'));
+   list.appendChild(row);
+ }
+ if(role!=='super_admin')return;
+ const c=card('Create Promo Code — starts disabled');
+ const fields=el('div','fields');
+ const code=input(fields,'Code (8–24 letters/numbers/hyphens)','AKIRA2026');
+ const coins=input(fields,'Coin reward','100','number');
+ const uses=input(fields,'Maximum redemptions','100','number');
+ const expiry=input(fields,'Expiry (ISO date/time; optional)','2026-12-31T23:59:00Z');
+ const msg=el('p','status');
+ c.append(fields,button('Create Disabled Code',async()=>{
+   const amount=Number(coins.value),maxUses=Number(uses.value),value=code.value.trim().toUpperCase();
+   if(!/^[A-Z0-9-]{8,24}$/.test(value)||!Number.isSafeInteger(amount)||amount<1||amount>10000||
+     !Number.isSafeInteger(maxUses)||maxUses<1||maxUses>500){msg.textContent='Invalid code, reward or redemption limit';return}
+   try{await post('/api/v1/admin/promos',{code:value,coins:amount,maxUses,enabled:false,expiresAt:expiry.value.trim()||null});
+     await render('promos');
+   }catch(e){msg.textContent=e.message}
+ }),msg);
+}
+async function supportPage(){
+ if(role!=='super_admin'){notice('Support inbox requires Super Admin permission.');return}
+ const c=card('Official Support Inbox');
+ const d=await call('/api/v1/admin/support');
+ const items=d.items||[];
+ c.appendChild(el('p','subtle',items.length+' recent tickets'));
+ if(!items.length)c.appendChild(el('p','','No support tickets yet.'));
+ for(const item of items){
+   const row=el('div','ticket');
+   row.style.cssText='border-top:1px solid #ffffff25;padding:12px 0';
+   row.append(el('h4','',item.userName+' · ID '+item.userId+' · '+item.subject),
+     el('p','',item.message||''),el('small','',item.status+' · ticket '+item.id));
+   const answer=input(row,'Official reply','Write a reply to this user');
+   answer.value=item.reply||'';
+   const status=el('select');
+   for(const v of ['open','answered','closed']){const opt=el('option','',v);opt.value=v;status.appendChild(opt)}
+   status.value=item.status;
+   const message=el('p','status');
+   row.append(status,button('Save Reply / Status',async()=>{
+     if(!confirm('Save support ticket '+item.id+'?'))return;
+     try{await post('/api/v1/admin/support',{id:item.id,reply:answer.value,status:status.value});message.textContent='Saved ✓'}catch(e){message.textContent=e.message}
+   }),message);
+   c.appendChild(row);
+ }
+}
+async function contentPage(kind){
+ const list=card('Official '+kind+' manager');
+ const data=await call('/api/v1/admin/content?kind='+encodeURIComponent(kind));
+ const items=data.items||[];
+ list.appendChild(el('p','subtle',items.length+' published or draft items.'));
+ if(!items.length)list.appendChild(el('p','','No items configured.'));
+ let edit=null,form;
+ for(const item of items){
+   const row=el('div','rowline');
+   row.append(el('span','',item.title+' · '+(item.enabled?'Active':'Disabled')),el('small','',String(item.id)));
+   if(role==='super_admin')row.appendChild(button('Edit',()=>{edit=item;fill(item);window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})},'btn o s'));
+   list.appendChild(row);
+ }
+ if(role!=='super_admin')return;
+ form=card('Create / edit official '+kind);
+ const fields=el('div','fields');
+ const title=input(fields,'Title','Official '+kind+' title');
+ const bodyLabel=el('label','','Description / Text'),body=el('textarea');body.rows=4;body.maxLength=10000;bodyLabel.appendChild(body);fields.appendChild(bodyLabel);
+ const asset=input(fields,'Image HTTPS URL or transparent image data (optional)','https://...');
+ const pick=el('input');pick.type='file';pick.accept='image/png,image/jpeg,image/webp,image/gif';
+ const photo=el('label','','Or choose image from gallery');photo.appendChild(pick);fields.appendChild(photo);
+ pick.onchange=()=>{const file=pick.files?.[0];if(!file)return;if(file.size>200000){alert('Please choose an image smaller than 200 KB');return}
+   const fr=new FileReader();fr.onload=()=>{asset.value=String(fr.result||'')};fr.readAsDataURL(file)};
+ const start=input(fields,'Starts at (ISO UTC; optional)','2026-11-01T00:00:00Z');
+ const end=input(fields,'Ends at (ISO UTC; optional)','2026-11-30T23:59:00Z');
+ const enabled=el('input');enabled.type='checkbox';
+ const enabledLabel=el('label');enabledLabel.append(enabled,document.createTextNode(' Published / Enabled'));fields.appendChild(enabledLabel);
+ const msg=el('p','status');
+ function fill(item){title.value=item.title||'';body.value=item.body||'';asset.value=item.asset||'';
+   start.value=item.startsAt||'';end.value=item.endsAt||'';enabled.checked=!!item.enabled}
+ form.append(fields,button('Save Official Content',async()=>{
+   if(!title.value.trim()){msg.textContent='Title required';return}
+   if(!confirm((edit?'Update':'Create')+' this '+kind+'?'))return;
+   const data={kind,title:title.value.trim(),body:body.value,asset:asset.value.trim(),enabled:enabled.checked,
+     startsAt:start.value.trim()||null,endsAt:end.value.trim()||null,...(edit?{id:edit.id}:{requestId:requestId()})};
+   try{await post('/api/v1/admin/content',data);await render(currentPage)}catch(e){msg.textContent=e.message}
+ }),button('New Draft',()=>{edit=null;fill({enabled:false});msg.textContent=''},'btn o s'),msg);
 }
 function plannedPage(){const p=pages.find(x=>x[1]===currentPage);const name=p?p[2]:'Feature';notice(name+' is not connected yet. This feature cannot change Akira until its protected backend API and database operations are implemented and tested.');const c=card('Implementation status');line(c,'Feature',name);line(c,'Current state','Read-only placeholder · Not live');line(c,'Required','Authenticated endpoint + authorization + server-side validation');line(c,'Rollout','Backup → tests → staging → production')}
 loginPage();

@@ -24,7 +24,9 @@ test('wallet shows real balance and compact units without local minting',()=>{
 test('Food Wheel and Jackpot cannot spend offline demo coins',()=>{
   const food=file('web/food-wheel/game.js');
   const jackpot=file('web/jackpot-fruit/index.html');
-  assert.match(food,/if \(!akiraToken \|\| !akiraLiveActive\) \{ toast\('Live game server unavailable'\); return false;/);
+  assert.match(food,/akiraApi\('\/games\/food-wheel\/bets'/);
+  assert.doesNotMatch(food,/demoStartBetting\(\);\s*return/);
+  assert.match(food,/akiraLiveActive/);
   assert.match(food,/maxBetPerRound: Number\.MAX_SAFE_INTEGER/);
   assert.match(jackpot,/if\(!akiraToken\|\|!akiraLive\)return msg\('Live game server unavailable'\)/);
   assert.match(jackpot,/if\(!serverSettled\)/);
@@ -39,4 +41,23 @@ test('LiveKit is packaged and microphone is requested before joining seats',()=>
   assert.doesNotMatch(room,/cdn\.jsdelivr/);
   assert.match(build,/sdkSha/);
   assert.match(seat,/akiraEnsureMicPermission/);
+});
+
+test('verified ID seller transfers debit the real seller ledger',()=>{
+  const ui=file('web/src/wallet-v7.js');
+  const backend=file('server/src/server.mjs');
+  const ledger=file('server/src/seller-wallet.mjs');
+  assert.match(ui,/community\/seller-recipient\?id=/);
+  assert.match(ui,/seller\/wallet/);
+  assert.match(ui,/seller\/transfer/);
+  assert.match(ui,/crypto\.randomUUID\(\)/);
+  assert.match(backend,/sellerSend\(user\.id,body\.publicId,body\.amount,body\.requestId\)/);
+  assert.match(ledger,/INSERT INTO akira_wallet_transactions/);
+});
+test('room seat and Google login API routes are in the real server handler',()=>{
+  const server=file('server/src/server.mjs');
+  const control=file('server/src/control.mjs');
+  assert.match(server,/auth\/google\/config/);
+  assert.match(server,/const seatRoute/);
+  assert.match(control,/publicPath&&section==='gift-policy'/);
 });

@@ -163,14 +163,85 @@
     } catch (e) { if (window.toast) window.toast(e.message || 'Exchange failed'); }
     finally { working = false; }
   }
+  var sellerState = null;
+  var sellerRecipient = null;
+  function sellerView(message) {
+    if (!sellerState) return;
+    var wallet = sellerState.wallet, history = sellerState.history || [];
+    var balance = String(wallet.balance ?? '');
+    var search = '<label for="av7sellerId">Recipient 6-digit Akira ID</label>' +
+      '<input id="av7sellerId" class="av7field" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="Example: 100001" autocomplete="off">' +
+      '<button class="av7btn blue" data-av7="seller-lookup">Search user ID</button>';
+    var found = sellerRecipient ? '<div class="av7row"><div><b>' + esc(sellerRecipient.name) +
+      '</b><div class="av7muted">Verified Akira ID ' + esc(sellerRecipient.id) + '</div></div></div>' +
+      '<label for="av7sellerAmount">Coins to send</label><input id="av7sellerAmount" class="av7field" inputmode="numeric" type="number" min="1" step="1" placeholder="Coin amount">' +
+      '<button class="av7btn" data-av7="seller-send">Confirm coin transfer</button>' : '';
+    var ledger = history.length ? history.map(function (h) {
+      return '<div class="av7row"><div><b>ID ' + esc(h.recipientId || '') + '</b><div class="av7muted">' + esc(h.createdAt || '') +
+        '</div></div><span>🪙 ' + esc(exact(h.amount)) + '</span></div>';
+    }).join('') : '<p class="av7muted">No seller transfers yet.</p>';
+    root.innerHTML = controls() + '<div class="av7body"><div class="av7card"><h3>Official Seller Wallet</h3>' +
+      '<div class="av7muted">Server-verified seller balance</div><h3>🪙 ' + esc(short(balance)) + '</h3>' +
+      '<p class="av7muted">Exact: ' + esc(exact(balance)) + '</p>' +
+      '<div class="av7section"><h3>Send coins to an Akira user</h3>' + search +
+      (message ? '<p class="av7error" role="status">' + esc(message) + '</p>' : '') + found + '</div>' +
+      '<details class="av7section"><summary>Recent seller transfers</summary>' + ledger + '</details>' +
+      '<button class="av7btn blue" data-av7="seller-wallet">Refresh seller wallet</button>' +
+      '<button class="av7btn" data-av7="reload">Back to Wallet</button></div></div>';
+    if (sellerRecipient) root.querySelector('#av7sellerId').value = sellerRecipient.id;
+  }
   async function sellerWallet() {
+    sellerState = null; sellerRecipient = null;
+    root.innerHTML = controls() + '<div class="av7body av7muted">Checking the official seller wallet…</div>';
     try {
-      var data = await request('/api/v1/community/seller-wallet');
+      var data = await request('/api/v1/seller/wallet');
+      if (!data.wallet || !data.wallet.enabled || !/^\\d+$/.test(String(data.wallet.balance ?? '')))
+        throw new Error('Seller account is not enabled by Admin.');
+      var entries = await request('/api/v1/seller/history').catch(function () { return {transfers: []}; });
+      sellerState = {wallet: data.wallet, history: Array.isArray(entries.transfers) ? entries.transfers : []};
+      sellerView('');
+    } catch (e) {
       root.innerHTML = controls() + '<div class="av7body"><div class="av7card"><h3>Official Seller Wallet</h3>' +
-        '<p>Balance: 🪙 ' + esc(short(data.balance || 0)) + '</p><p class="av7muted">Exact: ' + esc(exact(data.balance)) + '</p>' +
-        (!data.enabled ? '<p class="av7muted">Your account is not an approved coin seller.</p>' : '') +
+        '<p class="av7error">' + esc(e.message || 'Seller service unavailable') + '</p>' +
+        '<p class="av7muted">Only an Admin-enabled seller with a real seller balance can transfer coins.</p>' +
         '<button class="av7btn" data-av7="reload">Back to Wallet</button></div></div>';
-    } catch (e) { if (window.toast) window.toast(e.message || 'Seller service unavailable'); }
+    }
+  }
+  async function sellerLookup() {
+    if (working || !sellerState) return;
+    var input = root.querySelector('#av7sellerId');
+    var id = (input && input.value || '').trim();
+    sellerRecipient = null;
+    if (!/^\\d{6}$/.test(id)) { sellerView('Enter a valid 6-digit user ID.'); return; }
+    working = true;
+    try {
+      var result = await request('/api/v1/community/seller-recipient?id=' + encodeURIComponent(id));
+      if (!result.user || String(result.user.id) !== id) throw new Error('User ID was not verified by the server.');
+      sellerRecipient = {id: id, name: String(result.user.name || 'Akira User')};
+      sellerView('');
+    } catch (e) { sellerView(e.message || 'User not found.'); }
+    finally { working = false; }
+  }
+  async function sellerTransfer() {
+    if (working || !sellerState || !sellerRecipient) return;
+    var field = root.querySelector('#av7sellerAmount');
+    var amount = Number(field && field.value);
+    var max = BigInt(String(sellerState.wallet.balance));
+    if (!Number.isSafeInteger(amount) || amount <= 0) { sellerView('Enter a positive whole-coin amount.'); return; }
+    if (BigInt(amount) > max) { sellerView('Insufficient official seller balance.'); return; }
+    if (!window.crypto || !window.crypto.randomUUID) { sellerView('Secure request ID unavailable.'); return; }
+    var recipient = sellerRecipient;
+    if (!confirm('Send ' + exact(amount) + ' real coins to ' + recipient.name + ' (ID ' + recipient.id + ')?')) return;
+    working = true;
+    try {
+      await request('/api/v1/seller/transfer', 'POST', {
+        publicId: recipient.id, amount: amount, requestId: window.crypto.randomUUID()
+      });
+      if (window.toast) window.toast('Real coin transfer confirmed by Akira server');
+      await sellerWallet();
+      if (typeof window.akiraRefreshWallet === 'function') window.akiraRefreshWallet();
+    } catch (e) { sellerView(e.message || 'Transfer failed. No success was recorded.'); }
+    finally { working = false; }
   }
   function handle(e) {
     var btn = e.target.closest('[data-av7]'); if (!btn) return;
@@ -180,6 +251,8 @@
     if (action === 'reload') { load(); return; }
     if (action === 'exchange-now') { exchange(); return; }
     if (action === 'seller-wallet') { sellerWallet(); return; }
+    if (action === 'seller-lookup') { sellerLookup(); return; }
+    if (action === 'seller-send') { sellerTransfer(); return; }
     if (action === 'copy') {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(btn.dataset.id || '');
       if (window.toast) window.toast('Seller ID: ' + (btn.dataset.id || ''));

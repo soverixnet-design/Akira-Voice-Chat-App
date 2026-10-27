@@ -11,6 +11,7 @@ services:
       PGDATABASE: akira_db
       PGPASSWORD_FILE: /run/secrets/db_password
       AKIRA_ALLOWED_ORIGINS: "${AKIRA_ALLOWED_ORIGINS:-https://api.soverixnet.online,https://voice.soverixnet.online,https://localhost,capacitor://localhost}"
+      AKIRA_GOOGLE_WEB_CLIENT_ID: "${AKIRA_GOOGLE_WEB_CLIENT_ID:-}"
       AKIRA_LIVEKIT_API_KEY: "${AKIRA_LIVEKIT_API_KEY:-}"
       AKIRA_LIVEKIT_API_SECRET: "${AKIRA_LIVEKIT_API_SECRET:-}"
       AKIRA_LIVEKIT_URL: "${AKIRA_LIVEKIT_URL:-}"

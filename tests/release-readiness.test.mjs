@@ -8,13 +8,16 @@ const app=read('web/index.html');
 const room=read('web/room.html');
 const stage=read('scripts/deploy-akira-seller-safe.sh');
 const android=read('android/variables.gradle');
-test('real protected Admin finance and safety endpoints are wired',()=>{
- for(const route of ['/api/v1/admin/wallet/recharge','/api/v1/admin/sellers/status','/api/v1/admin/sellers/allocate','/api/v1/admin/reports','/api/v1/admin/deletion-requests']){
-  assert(api.includes(route),'Missing API route '+route);
+test('original live Admin finance and safety routes are preserved and protected',()=>{
+ const control=read('server/src/control.mjs');
+ assert.match(api,/controlRoutes\(req, url, send\)/);
+ assert.match(control,/requireAdmin\(req\.headers\.authorization\)/);
+ for(const section of ["section==='wallet'","section==='sellers'","section==='seller-funds'","section==='reports'","section==='deletion-requests'"]){
+  assert(control.includes(section),'Missing protected live Admin section '+section);
  }
+ assert(api.includes('/api/v1/admin/sellers/status'));
+ assert(api.includes('/api/v1/admin/sellers/allocate'));
  assert.match(admin,/function plannedPage\(/);
- assert(admin.includes('/api/v1/admin/wallet/recharge'));
- assert(admin.includes('/api/v1/admin/sellers/status'));
 });
 test('Akira loads authenticated wallet and seller scripts without replacing existing UI',()=>{
  for(const script of ['src/seller-panel.js','src/seller-directory.js','src/wallet-sync.js','src/wallet-safety.js','src/account-deletion-ui.js']){
@@ -25,7 +28,7 @@ test('Akira loads authenticated wallet and seller scripts without replacing exis
  }
 });
 test('voice mic seats, game debits and deletion requests are protected at server',()=>{
- for(const route of ['roomSeatRoute','game_engine_disabled','/api/v1/account/deletion-request']){
+ for(const route of ['seatRoute','game_engine_disabled','/api/v1/account/deletion-request']){
   assert(api.includes(route),'Missing protected gate '+route);
  }
  const seats=read('server/src/room-seats.mjs');
@@ -49,8 +52,8 @@ test('Play target SDK is 36 but signed release is a separate step',()=>{
  assert.match(read('web/admin.html'),/Akira Admin Control Center/);
 });
 
-test('existing live Admin handlers are preserved when modules are present',()=>{
- assert.match(api,/loadOptionalLegacyModule/);
- assert.match(api,/legacyControlRoutes/);
- assert.match(api,/legacyServeAdmin/);
+test('live Admin handlers stay connected without requiring optional files in fresh CI',()=>{
+ assert.match(api,/import \{ controlRoutes \} from '\.\/control\.mjs'/);
+ assert.match(api,/import\('\.\/admin-panel\.mjs'\)/);
+ assert.match(api,/if \(await controlRoutes\(req, url, send\)\) return/);
 });

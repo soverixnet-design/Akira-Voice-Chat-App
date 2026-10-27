@@ -7,20 +7,26 @@ const CONFIG={
  'jackpot-fruit':{rounds:'akira_jackpot_rounds',bets:'akira_jackpot_bets',result:'result_item',duration:20,
   weights:{lemon:5,grape:5,kiwi:5,cherry:40,peach:5,watermelon:20,banana:10,strawberry:10}}
 };
+export async function gameIsEnabled(game,pool=getPool()) {
+ if(!CONFIG[game])return false;
+ const {rows}=await pool.query('SELECT enabled FROM akira_control_games WHERE game=$1',[game]);
+ return rows[0]?.enabled===true;
+}
 function outcome(weights){
  const entries=Object.entries(weights), total=entries.reduce((a,[,m])=>a+1/m,0);
  let r=randomInt(0,1000000000)/1000000000*total;
  for(const [id,m] of entries){r-=1/m;if(r<0)return id;}
  return entries.at(-1)[0];
 }
-export async function advanceGameRound(game){
+export async function advanceGameRound(game,{createNext=true}={}){
  const c=CONFIG[game];if(!c)throw Error('unknown_game');
  const client=await getPool().connect();
  try {
   await client.query('BEGIN');
   // Transaction-level advisory lock serializes multiple API replicas.
   await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',['akira-game:'+game]);
-  const {rows}=await client.query(`SELECT id,betting_ends_at,settled_at FROM ${c.rounds} ORDER BY id DESC LIMIT 1 FOR UPDATE`);
+  await client.query(`SELECT setval(pg_get_serial_sequence('${c.rounds}', 'id'), COALESCE((SELECT MAX(id) FROM ${c.rounds}), 1), true)`);
+    const {rows}=await client.query(`SELECT id,betting_ends_at,settled_at FROM ${c.rounds} ORDER BY id DESC LIMIT 1 FOR UPDATE`);
   const latest=rows[0];
   if(latest && !latest.settled_at && new Date(latest.betting_ends_at).getTime()<=Date.now()){
    const result=outcome(c.weights);
@@ -45,7 +51,7 @@ export async function advanceGameRound(game){
    }
    await client.query(`UPDATE ${c.rounds} SET ${c.result}=$2,settled_at=now()${game==='jackpot-fruit'?",bonus='none',jackpot_pool_after=jackpot_pool_before":''} WHERE id=$1`,[latest.id,result]);
   }
-  if(!latest || new Date(latest.betting_ends_at).getTime()<=Date.now()){
+  if(createNext && (!latest || new Date(latest.betting_ends_at).getTime()<=Date.now())){
    await client.query(`INSERT INTO ${c.rounds}(starts_at,betting_ends_at) VALUES(now(),now()+($1::int * interval '1 second'))`,[c.duration]);
   }
   await client.query('COMMIT');
@@ -56,7 +62,10 @@ export function startGameEngine(){
  let busy=false;
  const tick=async()=>{
   if(busy)return;busy=true;
-  try{for(const game of Object.keys(CONFIG))await advanceGameRound(game);}
+  try{for(const game of Object.keys(CONFIG)){
+    // Settle an already-open round even after an admin pauses new bets.
+    await advanceGameRound(game,{createNext:await gameIsEnabled(game)});
+  }}
   catch(err){console.error('game_engine_tick_failed',err.message);}
   finally{busy=false;}
  };

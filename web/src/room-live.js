@@ -67,7 +67,7 @@
  async function syncMic(){
   if(!akiraVoiceRoom)return;
   const allowed=window.__akiraVoiceSeatActive&&!myMute;
-  try{await akiraVoiceRoom.localParticipant.setMicrophoneEnabled(allowed)}
+  try{if(allowed&&typeof window.akiraEnsureMicPermission==='function'){const permission=await window.akiraEnsureMicPermission();if(!permission)throw Error('microphone_permission_denied')};await akiraVoiceRoom.localParticipant.setMicrophoneEnabled(allowed)}
   catch(e){myMute=true;mic.textContent='🔇';mic.classList.add('off');notify('Microphone permission needed')}
  }
  async function refresh(){
@@ -78,23 +78,15 @@
   finally{updating=false}
  }
  async function actSeat(body){
-  // Seat membership is server-owned. A missing mic permission must not prevent
-  // an authenticated user from sitting; keep their mic muted until consent.
-  let permitted=true;
-  if(body.leave!==true && typeof window.akiraEnsureMicPermission==='function'){
-   permitted=await window.akiraEnsureMicPermission();
-  }
   try{
    const state=await request('POST','seat',body);
-   myMute=body.leave===true||!permitted;
+   myMute=body.leave===true;
    draw(state);
    if(!myMute){
-    if(!akiraVoiceRoom){void akiraStartVoice();}
+    if(!akiraVoiceRoom){akiraStartVoice();}
     else await syncMic();
    }
-   notify(body.leave===true?'Left microphone seat':
-     !permitted?'Seat joined muted. Grant microphone permission to speak.':
-     akiraVoiceRoom?'Seat joined — microphone on':'Seat joined — connecting voice…');
+   notify(body.leave===true?'Left microphone seat':'Seat joined — microphone on');
   }catch(e){notify('Seat: '+e.message);await refresh()}
  }
  const sheet=window.seatSheet;
@@ -116,9 +108,6 @@
  };
  mic.onclick=async()=>{
   if(localSeat===null){notify('Tap an empty seat to talk');return}
-  if(myMute && typeof window.akiraEnsureMicPermission==='function'){
-   if(!await window.akiraEnsureMicPermission())return;
-  }
   myMute=!myMute;
   mic.textContent=myMute?'🔇':'🎤';
   mic.classList.toggle('off',myMute);

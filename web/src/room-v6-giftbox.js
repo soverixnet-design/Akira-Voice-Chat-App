@@ -31,7 +31,7 @@
   }
   // Read authoritative membership from the room API, including audience who
   // are not on a microphone seat. Never use local demo/placeholder avatars.
-  async function people(){
+  async function people(policy){
     if(!/^\d{6,18}$/.test(String(ctx.id||'')))throw Error('Room ID unavailable');
     var snapshot=await call('/rooms/'+encodeURIComponent(String(ctx.id))+'/seats');
     if(!Array.isArray(snapshot.members)||!Array.isArray(snapshot.seats))throw Error('Room users unavailable');
@@ -43,11 +43,13 @@
     });
     return snapshot.members.reduce(function(result,u){
       var id=String(u.publicId||'');
-      if(!/^\d{6,18}$/.test(id)||id===own||known.has(id))return result;
+      if(!/^\d{6,18}$/.test(id)||known.has(id))return result;
+      if(id===own&&!policy.allowSelfGifts)return result;
+      if(id!==own&&!policy.allowOtherGifts)return result;
       known.add(id);
       result.push({id:id,name:String(u.displayName||'User'),seat:seatById.has(id)?seatById.get(id):null});
       return result;
-    },[]).sort(function(a,b){return (a.seat===null?99:a.seat)-(b.seat===null?99:b.seat)});
+    },[]).concat(policy.allowSelfGifts&&/^\d{6,18}$/.test(own)&&!known.has(own)?[{id:own,name:'Myself',seat:seatById.has(own)?seatById.get(own):null}]:[]).sort(function(a,b){return (a.id===own?-1:(b.id===own?1:(a.seat===null?99:a.seat)-(b.seat===null?99:b.seat)))});
   }
   function ui(items,balance,users){
     var gifts=items.filter(function(it){return it&&it.kind==='gift'&&Number.isSafeInteger(Number(it.price))&&Number(it.price)>0&&
@@ -60,7 +62,7 @@
        '<div class="c" style="background:linear-gradient(145deg,#8b5cf6,#db2777)">👤</div>'+escrow(u.name)+'<small> ID '+escrow(u.id)+(u.seat===null?' · Audience':' · Seat '+(u.seat+1))+'</small></button>';
     }).join('');
     var h='<h3>🎁 Gift Box <small style="margin-left:auto;color:#fde68a">🪙 '+money(balance)+'</small></h3>'+
-      '<div class="lbl">Send to real room users</div>'+
+      '<div class="lbl">Select myself or other real room users (as enabled by Admin)</div>'+
       '<div class="chips" style="display:flex;gap:6px;overflow-x:auto;max-width:100%">'+(recipients||'<div class="lbl">No other users are in this room yet. Invite a friend to send a gift.</div>')+'</div>'+
       '<div class="lbl">Available Gifts from Admin</div>'+
       '<div class="gifts" style="max-height:230px;overflow-y:auto">'+gifts.map(function(g){
@@ -92,11 +94,12 @@
     if(!ctx.voiceAuth){say('Log in before sending real gifts');return}
     window.open('<h3>🎁 Gift Box</h3><div class="lbl">Loading real wallet and active gifts…</div>');
     try{
-      var result=await Promise.all([call('/community/catalog'),call('/wallet')]);
+      var result=await Promise.all([call('/community/catalog'),call('/wallet'),call('/community/gift-policy')]);
       var all=Array.isArray(result[0].items)?result[0].items:[];
       var balance=coinNumber(result[1].wallet?.balance).toString();
       selected.clear();
-      var users=await people();
+      var policy={allowSelfGifts:result[2].allowSelfGifts===true,allowOtherGifts:result[2].allowOtherGifts===true};
+      var users=await people(policy);
       ui(all,balance,users);
     }catch(e){window.open('<h3>🎁 Gift Box</h3><div class="lbl">'+escrow(e.message||'Gift catalog unavailable')+'</div>')}
   }

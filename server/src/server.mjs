@@ -228,7 +228,21 @@ export const requestHandler = async (req, res) => {
         await advanceGameRound(game,{createNext:gameEnabled}).catch(err=>console.error('round_advance_failed',err.message));
       }
       const {rows}=await pool.query(`SELECT id::text,starts_at AS "startsAt",betting_ends_at AS "endsAt",settled_at AS "settledAt",${resultCol} AS result FROM ${table} ORDER BY id DESC LIMIT 2`);
-      return send(200,{game,round:rows[0]||null,previousRound:rows[1]||null,serverTime:new Date().toISOString(),bettingEnabled:engineOn&&gameEnabled});
+      // Real per-item totals and the authenticated user's bets. Never show fake players.
+      const betsTable=game==='food-wheel'?'akira_food_bets':'akira_jackpot_bets';
+      let totals={},myBets={},players=0;
+      if(rows[0]){
+        const [{rows:amounts},{rows:people}]=await Promise.all([
+          pool.query(`SELECT item_id,SUM(amount)::text AS total,COALESCE(SUM(amount) FILTER(WHERE user_id=$1),0)::text AS mine FROM ${betsTable} WHERE round_id=$2 GROUP BY item_id`,[user.id,rows[0].id]),
+          pool.query(`SELECT COUNT(DISTINCT user_id)::int AS players FROM ${betsTable} WHERE round_id=$1`,[rows[0].id])
+        ]);
+        for(const item of amounts){totals[item.item_id]=item.total;myBets[item.item_id]=item.mine}
+        players=people[0]?.players||0;
+      }
+      return send(200,{game,round:rows[0]||null,previousRound:rows[1]||null,
+        serverTime:new Date().toISOString(),bettingEnabled:engineOn&&gameEnabled,
+        reason:!engineOn?'game_engine_disabled':!gameEnabled?'game_disabled':null,
+        totals,myBets,players});
     }catch(err){console.error('round_read_failed',err.message);return send(503,{error:'round_unavailable'});}
   }
   const betMatch = url.pathname.match(/^\/api\/v1\/games\/(food-wheel|jackpot-fruit)\/bets$/);

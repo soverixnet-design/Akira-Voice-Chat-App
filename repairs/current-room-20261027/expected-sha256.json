@@ -1,0 +1,6 @@
+{
+  "web/src/room-live.js": "56abd505a49d4aab9fafd7deacc91081630508e0387690a7f6c428f6966a5e54",
+  "web/src/room.js": "300b570c3b33d032c21f8b10e796a97d4b619be49882e5ffbf5edcbb3737dee1",
+  "server/src/server.mjs": "cd8509377abd12cfa9e65fec79b84f375c09e2f5ddb6b98e5ef4e45b4b86c0bc",
+  "server/src/room-seats.mjs": "d30fb59a4d2c67eb77c9c1791e4390258abe6dc1ec481655b61e776cc37805a2"
+}

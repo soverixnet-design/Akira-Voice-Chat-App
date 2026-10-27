@@ -280,12 +280,12 @@ export const requestHandler = async (req, res) => {
       enabled: ['health', 'status', 'database', 'room-read', 'room-create', 'room-join', 'room-leave', 'email-auth', 'voice-token'], pending: ['voice-provider-configuration', 'wallet', 'gifts', 'admin'] });
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/rooms') {
-    try { return send(200, { app: appId, rooms: await listRooms() }); }
+    try { const actor=await authenticate(req.headers.authorization);if(!actor)return send(401,{error:'unauthorized'});return send(200, { app: appId, rooms: await listRooms() }); }
     catch (err) { console.error('room_list_failed', err.message); return send(503, { error: 'database_unavailable', app: appId }); }
   }
   const roomMatch = url.pathname.match(/^\/api\/v1\/rooms\/(\d{1,18})$/);
   if (req.method === 'GET' && roomMatch) {
-    try { const room = await getRoom(roomMatch[1]); return room ? send(200, { app: appId, room }) : send(404, { error: 'room_not_found', app: appId }); }
+    try { const actor=await authenticate(req.headers.authorization);if(!actor)return send(401,{error:'unauthorized'});const room = await getRoom(roomMatch[1]); return room ? send(200, { app: appId, room }) : send(404, { error: 'room_not_found', app: appId }); }
     catch (err) { console.error('room_read_failed', err.message); return send(503, { error: 'database_unavailable', app: appId }); }
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/admin/dashboard') {

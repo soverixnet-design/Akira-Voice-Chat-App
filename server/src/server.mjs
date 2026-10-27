@@ -360,7 +360,7 @@ export const requestHandler = async (req, res) => {
       routes: ['email-auth','google-auth','room-seats','voice-token','wallet','seller-transfer','community-gifts','food-wheel','admin'],
       configured: {
         googleOAuth: Boolean(googleClientId()),
-        liveKit: Boolean(process.env.AKIRA_LIVEKIT_API_KEY && process.env.AKIRA_LIVEKIT_API_SECRET && /^wss:\\/\\//.test(process.env.AKIRA_LIVEKIT_URL || '')),
+        liveKit: Boolean(process.env.AKIRA_LIVEKIT_API_KEY && process.env.AKIRA_LIVEKIT_API_SECRET && String(process.env.AKIRA_LIVEKIT_URL || '').startsWith('wss://')),
         gameEngine: process.env.AKIRA_GAME_ENGINE_ENABLED === 'true'
       },
       note: 'Configured status is not a substitute for authenticated end-to-end checks' });

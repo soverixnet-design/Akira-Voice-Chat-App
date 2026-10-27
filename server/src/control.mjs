@@ -1,8 +1,21 @@
 import { requireAdmin } from './admin.mjs';
 import { authenticate } from './auth.mjs';
 import { getPool } from './database.mjs';
+// Keep the original server's content and economy panels when present.
+async function optionalLiveModule(path) {
+  try {return await import(path)}
+  catch(err){
+    if(err.code==='ERR_MODULE_NOT_FOUND' && String(err.message).includes(path.slice(2)))return {};
+    throw err;
+  }
+}
+const {adminContentRoutes: contentRoute}=await optionalLiveModule('./admin-content.mjs');
+const {economyRoutes: economyRoute}=await optionalLiveModule('./admin-economy.mjs');
+const adminContentRoutes=typeof contentRoute==='function'?contentRoute:async()=>false;
+const economyRoutes=typeof economyRoute==='function'?economyRoute:async()=>false;
 const fail=(message,status=400)=>Object.assign(new Error(message),{status});
 export const kinds=['gift','frame','theme','entry','medal','vip','emoji','banner','notice','event'];
+const DAILY_CHECKIN_COINS=100; // Server-owned reward; never use the client's amount.
 const ident=v=>/^\d{1,18}$/.test(String(v??''));
 const text=(v,max)=>typeof v==='string'&&v.trim().length>0&&v.length<=max;
 export function validAsset(v){
@@ -88,6 +101,8 @@ async function queryRankings(db, type, period) {
 }
 
 export async function controlRoutes(req,url,send){
+ if(await adminContentRoutes(req,url,send))return true;
+ if(await economyRoutes(req,url,send))return true;
  const path=url.pathname,publicPath=path.startsWith('/api/v1/community/');
  if(!publicPath&&!path.startsWith('/api/v1/control/'))return false;
  try{
@@ -95,21 +110,33 @@ export async function controlRoutes(req,url,send){
   if(publicPath){user=await authenticate(req.headers.authorization);if(!user)throw fail('unauthorized',401);}
   else{a=await requireAdmin(req.headers.authorization);if(a.error)throw fail(a.error,a.status);user=a.user;}
   const section=path.split('/').at(-1);
+  if(!publicPath&&section==='gift-policy'){
+    if(a.role!=='super_admin')throw fail('super_admin_required',403);
+    if(req.method==='GET'){
+      const {rows}=await db.query('SELECT allow_self_gifts AS "allowSelfGifts",allow_other_gifts AS "allowOtherGifts" FROM akira_control_gift_policy WHERE id=1');
+      send(200,rows[0]||{allowSelfGifts:true,allowOtherGifts:true});return true;
+    }
+    if(req.method!=='POST')throw fail('method_not_allowed',405);
+    const b=await body(req);
+    if(typeof b.allowSelfGifts!=='boolean'||typeof b.allowOtherGifts!=='boolean')throw fail('invalid_gift_policy');
+    await db.query('INSERT INTO akira_control_gift_policy(id,allow_self_gifts,allow_other_gifts) VALUES(1,$1,$2) ON CONFLICT(id) DO UPDATE SET allow_self_gifts=excluded.allow_self_gifts,allow_other_gifts=excluded.allow_other_gifts',
+      [b.allowSelfGifts,b.allowOtherGifts]);
+    send(200,{ok:true,allowSelfGifts:b.allowSelfGifts,allowOtherGifts:b.allowOtherGifts});return true;
+  }
   if(publicPath){
+   if(req.method==='GET'&&section==='gift-policy'){
+    const {rows}=await db.query('SELECT allow_self_gifts AS "allowSelfGifts", allow_other_gifts AS "allowOtherGifts" FROM akira_control_gift_policy WHERE id=1');
+    send(200,rows[0]||{allowSelfGifts:true,allowOtherGifts:true});return true;
+   }
    if(req.method==='GET'&&section==='user-cosmetics'){
     const id=url.searchParams.get('id')||'';
-    if(!ident(id))throw fail('invalid_user_id');
-    const {rows}=await db.query(`SELECT c.kind,c.name,c.asset FROM akira_control_inventory i
-      JOIN akira_users u ON u.id=i.user_id
+    if(!/^\d{6,18}$/.test(id))throw fail('invalid_user_id');
+    const {rows}=await db.query(`SELECT c.kind,c.name,c.asset
+      FROM akira_users u JOIN akira_control_inventory i ON i.user_id=u.id
       JOIN akira_control_catalog c ON c.id=i.item_id
       WHERE u.public_id=$1 AND u.is_banned=false AND i.equipped=true
-        AND c.enabled=true AND c.kind IN ('frame','entry') ORDER BY c.id DESC`,[id]);
-    send(200,{id,items:rows});return true;
-   }
-   if(req.method==='GET'&&section==='gift-policy'){
-    const {rows}=await db.query('SELECT allow_self_gifts,allow_other_gifts FROM akira_control_gift_policy WHERE id=1');
-    const flags=rows[0]||{allow_self_gifts:false,allow_other_gifts:false};
-    send(200,{allowSelfGifts:flags.allow_self_gifts,allowOtherGifts:flags.allow_other_gifts});return true;
+        AND c.enabled=true AND c.kind IN ('frame','entry') LIMIT 5`,[id]);
+    send(200,{items:rows});return true;
    }
    if(req.method==='GET'&&section==='catalog'){const {rows}=await db.query('SELECT id,kind,name,description,asset,price FROM akira_control_catalog WHERE enabled=true ORDER BY id DESC LIMIT 500');send(200,{items:rows});return true;}
    if(req.method==='GET'&&section==='sellers'){
@@ -159,46 +186,59 @@ export async function controlRoutes(req,url,send){
    }
    if(req.method==='POST'&&section==='gift'){
     const b=await body(req),key=requestKey(b);
-    if(!ident(b.itemId)||!ident(b.recipientId))throw fail('invalid_gift_target');
-    if(Object.hasOwn(b,'luckyWin'))throw fail('client_lucky_payout_not_allowed');
-    const qty=Number(b.quantity||1);
+    const qty=b.quantity===undefined?1:b.quantity;
     if(!Number.isInteger(qty)||qty<1||qty>500)throw fail('invalid_gift_quantity');
+    if(!ident(b.recipientId))throw fail('invalid_recipient');
     const result=await transaction(async c=>{
      await c.query('SELECT id FROM akira_users WHERE id=$1 FOR UPDATE',[user.id]);
-     const {rows:prior}=await c.query(
-      'SELECT recipient_id,item_id,quantity,total FROM akira_control_gifts WHERE sender_id=$1 AND request_key=$2',
-      [user.id,key]);
-     if(prior.length){
-      const old=prior[0];
-      if(String(old.recipient_id)!==String(b.recipientId)||String(old.item_id)!==String(b.itemId)||Number(old.quantity)!==qty)throw fail('request_conflict',409);
+     const prior=await c.query('SELECT total FROM akira_control_gifts WHERE sender_id=$1 AND request_key=$2',[user.id,key]);
+     if(prior.rows.length){
       const w=await c.query('SELECT coalesce(balance,0)::text AS balance FROM akira_wallets WHERE user_id=$1',[user.id]);
-      return{ok:true,duplicate:true,total:Number(old.total),luckyWin:0,balance:w.rows[0]?.balance||'0'};
+      return{ok:true,duplicate:true,total:Number(prior.rows[0].total),balance:w.rows[0]?.balance||'0'};
      }
-     const policy=await c.query('SELECT allow_self_gifts,allow_other_gifts FROM akira_control_gift_policy WHERE id=1 FOR SHARE');
-     const flags=policy.rows[0]||{allow_self_gifts:false,allow_other_gifts:false};
-     const self=String(b.recipientId)===String(user.public_id);
-     if(self&&!flags.allow_self_gifts)throw fail('self_gifting_disabled',403);
-     if(!self&&!flags.allow_other_gifts)throw fail('other_gifting_disabled',403);
+     let item=null;
+     if(b.itemId&&ident(b.itemId)){
+      const r=await c.query("SELECT id,name,price,asset FROM akira_control_catalog WHERE id=$1 AND enabled=true AND kind='gift' FOR SHARE",[b.itemId]);
+      item=r.rows[0]||null;
+     }
+     if(!item&&typeof b.giftName==='string'&&b.giftName.trim()){
+      const gName=b.giftName.trim().slice(0,100);
+      const r=await c.query("SELECT id,name,price,asset FROM akira_control_catalog WHERE lower(name)=lower($1) AND kind='gift' AND enabled=true ORDER BY id LIMIT 1 FOR SHARE",[gName]);
+      item=r.rows[0]||null;
+     }
+     if(!item)throw fail('gift_unavailable');
+     const total=Number(item.price)*qty;
+     if(!Number.isSafeInteger(total)||total<=0)throw fail('invalid_price');
+     // No client-supplied luckyWin/price is authoritative. Luck-based payouts
+     // require their own server-controlled draw and settlement ledger.
+     const {rows:policyRows}=await c.query('SELECT allow_self_gifts,allow_other_gifts FROM akira_control_gift_policy WHERE id=1 FOR SHARE');
+     const p=policyRows[0]||{allow_self_gifts:true,allow_other_gifts:true};
+     const self=String(user.public_id)===String(b.recipientId);
+     if((self&&!p.allow_self_gifts)||(!self&&!p.allow_other_gifts))throw fail('gift_target_disabled',403);
      const recipient=await c.query('SELECT id,public_id FROM akira_users WHERE public_id=$1 AND is_banned=false',[b.recipientId]);
      if(!recipient.rows.length)throw fail('recipient_not_found',404);
-     const {rows:items}=await c.query(
-       "SELECT id,name,price,asset FROM akira_control_catalog WHERE id=$1 AND enabled=true AND kind='gift' FOR SHARE",
-       [b.itemId]);
-     const item=items[0];
-     if(!item)throw fail('gift_unavailable',404);
-     const price=Number(item.price),total=price*qty;
-     if(!Number.isSafeInteger(price)||price<=0||!Number.isSafeInteger(total)||total<=0)throw fail('invalid_price');
      const wd=await walletDelta(c,user.id,-total,'gift:'+key,'gift_sent');
+     const recPublicId=Number(recipient.rows[0].public_id);
      await c.query('INSERT INTO akira_control_diamonds(user_id,balance) VALUES($1,$2) ON CONFLICT(user_id) DO UPDATE SET balance=akira_control_diamonds.balance+excluded.balance',[recipient.rows[0].id,total]);
-     await c.query('INSERT INTO akira_control_gifts(sender_id,recipient_id,item_id,quantity,total,request_key) VALUES($1,$2,$3,$4,$5,$6)',[user.id,recipient.rows[0].public_id,item.id,qty,total,key]);
-     return{ok:true,total,luckyWin:0,balance:wd.balance,recipientId:String(recipient.rows[0].public_id)};
-    });
-    send(200,result);return true;
+     await c.query('INSERT INTO akira_control_gifts(sender_id,recipient_id,item_id,quantity,total,request_key) VALUES($1,$2,$3,$4,$5,$6)',[user.id,recPublicId,item.id,qty,total,key]);
+     return{ok:true,total,luckyWin:0,balance:wd.balance};
+    });send(200,result);return true;
    }
-   // Legacy handlers accepted client-supplied rewards and could mint arbitrary coins.
-   // Dedicated server-authoritative rewards are handled in server.mjs.
-   if(req.method==='POST'&&(section==='daily-checkin'||section==='room-reward')){
-    throw fail('use_verified_reward_endpoint',410);
+   if(req.method==='POST'&&section==='daily-checkin'){
+    await body(req); // Drain and validate the request, but never trust its reward amount.
+    const day=new Date().toISOString().slice(0,10);
+    const r=await transaction(async c=>{
+     await c.query('SELECT id FROM akira_users WHERE id=$1 FOR UPDATE',[user.id]);
+     const prior=await c.query('SELECT delta,balance_after FROM akira_wallet_transactions WHERE user_id=$1 AND reference_key=$2 AND reason=$3',[user.id,'daily:'+user.id+':'+day,'daily_checkin']);
+     if(prior.rows.length)return {ok:true,balance:String(prior.rows[0].balance_after),duplicate:true,amount:Number(prior.rows[0].delta)};
+     const wd=await walletDelta(c,user.id,DAILY_CHECKIN_COINS,'daily:'+user.id+':'+day,'daily_checkin');
+     return{ok:true,balance:wd.balance,duplicate:wd.duplicate,amount:DAILY_CHECKIN_COINS};
+    });send(200,r);return true;
+   }
+   if(req.method==='POST'&&section==='room-reward'){
+    // A room reward requires verified server participation and admin schedule.
+    // Until that exists, reject self-awarded client coin amounts.
+    throw fail('room_reward_not_available',403);
    }
    if(req.method==='POST'&&section==='transfer'){
     const b=await body(req),key=requestKey(b);if(!ident(b.recipientId)||!Number.isSafeInteger(b.amount)||b.amount<=0)throw fail('invalid_transfer');
@@ -209,14 +249,9 @@ export async function controlRoutes(req,url,send){
      await c.query('SELECT id FROM akira_users WHERE id=ANY($1::bigint[]) ORDER BY id FOR UPDATE',[[user.id,rid]]);
      const prior=await c.query('SELECT recipient_id,amount FROM akira_control_transfers WHERE sender_id=$1 AND request_key=$2',[user.id,key]);if(prior.rows.length){if(String(prior.rows[0].recipient_id)!==String(rid)||Number(prior.rows[0].amount)!==b.amount)throw fail('request_conflict',409);return{ok:true,duplicate:true};}
      const sw=await c.query('SELECT balance FROM akira_seller_wallets WHERE user_id=$1 FOR UPDATE',[user.id]).catch(()=>({rows:[]}));
-     let sellerBalanceAfter='0';
-     if(sw.rows.length && Number(sw.rows[0].balance)>=b.amount){
-      const upd=await c.query('UPDATE akira_seller_wallets SET balance=balance-$2,updated_at=now() WHERE user_id=$1 RETURNING balance::text',[user.id,b.amount]);
-      sellerBalanceAfter=upd.rows[0].balance;
-     }else{
-      const wd=await walletDelta(c,user.id,-b.amount,'transfer-out:'+key,'seller_transfer');
-      sellerBalanceAfter=wd.balance;
-     }
+     if(!sw.rows.length||Number(sw.rows[0].balance)<b.amount)throw fail('insufficient_seller_balance',409);
+     const upd=await c.query('UPDATE akira_seller_wallets SET balance=balance-$2,updated_at=now() WHERE user_id=$1 RETURNING balance::text',[user.id,b.amount]);
+     const sellerBalanceAfter=upd.rows[0].balance;
      await walletDelta(c,rid,b.amount,'transfer-in:'+user.id+':'+key,'seller_received');
      await c.query('INSERT INTO akira_control_transfers(sender_id,recipient_id,amount,request_key) VALUES($1,$2,$3,$4)',[user.id,rid,b.amount,key]);
      return{ok:true,sellerBalance:sellerBalanceAfter};
@@ -403,6 +438,8 @@ export async function controlRoutes(req,url,send){
     const rec=rRes.rows[0];
     const blk=await db.query('SELECT 1 FROM akira_blocks WHERE (user_id=$1 AND blocked_id=$2) OR (user_id=$2 AND blocked_id=$1)',[user.id,rec.id]);
     if(blk.rows.length)throw fail('user_blocked',403);
+    const mutual=await db.query('SELECT count(*)::int AS matches FROM akira_follows WHERE (follower_id=$1 AND target_id=$2) OR (follower_id=$2 AND target_id=$1)',[user.id,rec.id]);
+    if(Number(mutual.rows[0]?.matches)!==2)throw fail('mutual_follow_required',403);
     const ins=await db.query('INSERT INTO akira_messages(sender_id,recipient_id,body) VALUES($1,$2,$3) RETURNING id,body,created_at AS "createdAt"',[user.id,rec.id,msgBody]);
     send(201,{ok:true,message:{id:ins.rows[0].id,senderId:String(user.public_id),recipientId:rec.public_id,body:ins.rows[0].body,createdAt:ins.rows[0].createdAt,mine:true}});return true;
    }
@@ -427,14 +464,10 @@ export async function controlRoutes(req,url,send){
    }
    throw fail('not_found',404);
   }
-  const reads=['me','overview','users','rooms','wallet','sellers','seller-funds','catalog','roles','audit','reports','games','rewards','settings','gift-policy'];
+  const reads=['me','overview','users','rooms','wallet','sellers','seller-funds','catalog','roles','audit','reports','games','rewards','settings','deletion-requests'];
   if(req.method==='GET'&&reads.includes(section)){
+  if(section==='deletion-requests'&&a.role!=='super_admin')throw fail('super_admin_required',403);
    const q=(url.searchParams.get('q')||'').slice(0,100),offset=Math.max(0,Math.min(100000,parseInt(url.searchParams.get('page')||'0')||0))*50;let rows=[];
-   if(section==='gift-policy'){
-    const {rows}=await db.query('SELECT allow_self_gifts,allow_other_gifts FROM akira_control_gift_policy WHERE id=1');
-    const flags=rows[0]||{allow_self_gifts:false,allow_other_gifts:false};
-    send(200,{allowSelfGifts:flags.allow_self_gifts,allowOtherGifts:flags.allow_other_gifts});return true;
-   }
    if(section==='me'){send(200,{user:{id:String(user.public_id),name:user.display_name},role:a.role});return true;}
    if(section==='overview'){({rows}=await db.query("SELECT (SELECT count(*)::int FROM akira_users) users,(SELECT count(*)::int FROM akira_rooms) rooms,(SELECT count(*)::int FROM akira_control_reports WHERE status='open') reports,(SELECT coalesce(sum(balance),0)::text FROM akira_wallets) coins"));send(200,rows[0]);return true;}
    if(section==='users')({rows}=await db.query('SELECT u.public_id::text AS id,u.display_name AS name,u.bio,u.is_banned,coalesce(w.balance,0)::text AS coins,coalesce(d.balance,0)::text AS diamonds FROM akira_users u LEFT JOIN akira_wallets w ON w.user_id=u.id LEFT JOIN akira_control_diamonds d ON d.user_id=u.id WHERE u.display_name ILIKE $1 OR u.public_id::text ILIKE $1 ORDER BY u.id DESC LIMIT 51 OFFSET $2',['%'+q+'%',offset]));
@@ -457,6 +490,9 @@ export async function controlRoutes(req,url,send){
    if(section==='roles')({rows}=await db.query('SELECT u.public_id::text AS id,u.display_name AS name,r.role FROM akira_admin_roles r JOIN akira_users u ON u.id=r.user_id ORDER BY u.id LIMIT 51 OFFSET $1',[offset]));
    if(section==='audit')({rows}=await db.query('SELECT a.id,u.public_id::text AS actor_id,a.action,a.target_id,a.created_at FROM akira_admin_audit a JOIN akira_users u ON u.id=a.actor_user_id ORDER BY a.id DESC LIMIT 51 OFFSET $1',[offset]));
    if(section==='reports')({rows}=await db.query('SELECT r.id,u.public_id::text AS reporter_id,r.target_id,r.message,r.status,r.created_at FROM akira_control_reports r JOIN akira_users u ON u.id=r.user_id ORDER BY r.id DESC LIMIT 51 OFFSET $1',[offset]));
+   if(section==='deletion-requests')({rows}=await db.query(
+     'SELECT u.public_id::text AS "publicId",u.display_name AS "displayName",d.reason,d.status,d.requested_at AS "requestedAt" FROM akira_account_deletion_requests d JOIN akira_users u ON u.id=d.user_id ORDER BY d.requested_at DESC LIMIT 51 OFFSET $1',[offset]
+   ));
    if(section==='settings')({rows}=await db.query('SELECT id,coins_per_100 FROM akira_control_exchange'));
    if(section==='games')({rows}=await db.query('SELECT game,enabled FROM akira_control_games ORDER BY game'));
    if(section==='rewards')({rows}=await db.query('SELECT id,name,starts_at,ends_at,amount::text,winners,status FROM akira_control_rewards ORDER BY id DESC LIMIT 51 OFFSET $1',[offset]));
@@ -464,7 +500,7 @@ export async function controlRoutes(req,url,send){
   }
   if(req.method!=='POST')throw fail('not_found',404);
   if(!['super_admin','admin'].includes(a.role))throw fail('admin_required',403);
-  if(['wallet','roles','sellers','seller-funds','games','rewards','pay-reward','settings','gift-policy'].includes(section)&&a.role!=='super_admin')throw fail('super_admin_required',403);
+  if(['wallet','roles','sellers','seller-funds','games','rewards','pay-reward','settings'].includes(section)&&a.role!=='super_admin')throw fail('super_admin_required',403);
   const b=await body(req);
   const result=await transaction(async c=>{
    if(section==='users'){
@@ -475,20 +511,36 @@ export async function controlRoutes(req,url,send){
     if(!ident(b.id)||!text(b.name,100)||typeof b.description!=='string'||b.description.length>500||![5,10,12].includes(b.seat_count)||typeof b.is_locked!=='boolean')throw fail('invalid_room');
     const r=await c.query('UPDATE akira_rooms SET name=$1,description=$2,seat_count=$3,is_locked=$4,updated_at=now() WHERE public_id=$5 RETURNING id',[b.name.trim(),b.description,b.seat_count,b.is_locked,b.id]);if(!r.rows.length)throw fail('room_not_found',404);
    }else if(section==='wallet'){
-    const key=requestKey(b),u=await target(c,b.id);
+    const key=requestKey(b);
+    // Serialize this admin's requests, even when retries target different IDs.
+    await c.query('SELECT id FROM akira_users WHERE id=$1 FOR UPDATE',[user.id]);
+    const u=await target(c,b.id);
     const reason=text(b.reason,120)?b.reason.trim():'Admin recharge';
     const coinDelta=Number(b.delta||0);
     const diaDelta=Number(b.diamonds||0);
-    if((!Number.isSafeInteger(coinDelta)||coinDelta===0)&&(!Number.isSafeInteger(diaDelta)||diaDelta===0))throw fail('invalid_amount');
-    let r={balance:'0',duplicate:false};
-    if(Number.isSafeInteger(coinDelta)&&coinDelta!==0){
-     r=await walletDelta(c,u.id,coinDelta,'admin:'+user.id+':'+key,'admin_adjustment');
+    if(!Number.isSafeInteger(coinDelta)||!Number.isSafeInteger(diaDelta)||(coinDelta===0&&diaDelta===0))throw fail('invalid_amount');
+    const prior=await c.query('SELECT target_user_id,coin_delta,diamond_delta,coin_balance_after,diamond_balance_after FROM akira_control_admin_wallet_requests WHERE admin_user_id=$1 AND request_key=$2',[user.id,key]);
+    if(prior.rows.length){
+     const p=prior.rows[0];
+     if(String(p.target_user_id)!==String(u.id)||Number(p.coin_delta)!==coinDelta||Number(p.diamond_delta)!==diaDelta)throw fail('request_conflict',409);
+     return {ok:true,duplicate:true,balance:String(p.coin_balance_after),diamonds:String(p.diamond_balance_after)};
     }
-    if(Number.isSafeInteger(diaDelta)&&diaDelta!==0){
-     await c.query('INSERT INTO akira_control_diamonds(user_id,balance) VALUES($1,GREATEST(0,$2)) ON CONFLICT(user_id) DO UPDATE SET balance=GREATEST(0,akira_control_diamonds.balance+$2)',[u.id,diaDelta]);
+    let coinBalance;
+    if(coinDelta!==0){
+     coinBalance=(await walletDelta(c,u.id,coinDelta,'admin:'+user.id+':'+key,'admin_adjustment')).balance;
+    }else{
+     await c.query('INSERT INTO akira_wallets(user_id) VALUES($1) ON CONFLICT DO NOTHING',[u.id]);
+     const w=await c.query('SELECT balance::text FROM akira_wallets WHERE user_id=$1 FOR UPDATE',[u.id]);
+     coinBalance=w.rows[0].balance;
     }
-    if(!r.duplicate)await audit(c,a,'wallet:'+coinDelta+':dia:'+diaDelta+':'+reason,b.id);
-    return {ok:true,...r};
+    await c.query('INSERT INTO akira_control_diamonds(user_id,balance) VALUES($1,0) ON CONFLICT DO NOTHING',[u.id]);
+    const d=await c.query('SELECT balance FROM akira_control_diamonds WHERE user_id=$1 FOR UPDATE',[u.id]);
+    const diamondBalance=Number(d.rows[0].balance)+diaDelta;
+    if(!Number.isSafeInteger(diamondBalance)||diamondBalance<0)throw fail('insufficient_diamonds',409);
+    if(diaDelta!==0)await c.query('UPDATE akira_control_diamonds SET balance=$2 WHERE user_id=$1',[u.id,diamondBalance]);
+    await c.query('INSERT INTO akira_control_admin_wallet_requests(admin_user_id,request_key,target_user_id,coin_delta,diamond_delta,coin_balance_after,diamond_balance_after) VALUES($1,$2,$3,$4,$5,$6,$7)',[user.id,key,u.id,coinDelta,diaDelta,coinBalance,diamondBalance]);
+    await audit(c,a,'wallet:'+coinDelta+':dia:'+diaDelta+':'+reason,b.id);
+    return {ok:true,duplicate:false,balance:String(coinBalance),diamonds:String(diamondBalance)};
    }else if(section==='roles'){
     const u=await target(c,b.id),existing=await c.query('SELECT role FROM akira_admin_roles WHERE user_id=$1 FOR UPDATE',[u.id]);if(String(u.id)===String(user.id)||existing.rows[0]?.role==='super_admin')throw fail('protected_super_admin',403);if(!['admin','manager','moderator','remove'].includes(b.role))throw fail('invalid_role');
     if(b.role==='remove')await c.query('DELETE FROM akira_admin_roles WHERE user_id=$1',[u.id]);else await c.query('INSERT INTO akira_admin_roles(user_id,role) VALUES($1,$2) ON CONFLICT(user_id) DO UPDATE SET role=excluded.role',[u.id,b.role]);
@@ -498,9 +550,17 @@ export async function controlRoutes(req,url,send){
     await c.query('UPDATE akira_users SET is_seller=$1,updated_at=now() WHERE id=$2',[b.enabled,u.id]).catch(()=>{});
     await c.query('INSERT INTO akira_seller_wallets(user_id,balance) VALUES($1,0) ON CONFLICT(user_id) DO NOTHING',[u.id]).catch(()=>{});
    }else if(section==='seller-funds'){
-    const key=requestKey(b),u=await target(c,b.id);
+    const key=requestKey(b);
+    await c.query('SELECT id FROM akira_users WHERE id=$1 FOR UPDATE',[user.id]);
+    const u=await target(c,b.id);
     const reason=text(b.reason,120)?b.reason.trim():'Admin seller funding';
     if(!Number.isSafeInteger(b.delta)||b.delta===0)throw fail('invalid_seller_funding');
+    const prior=await c.query('SELECT target_user_id,delta,balance_after FROM akira_control_admin_seller_funding_requests WHERE admin_user_id=$1 AND request_key=$2',[user.id,key]);
+    if(prior.rows.length){
+     const p=prior.rows[0];
+     if(String(p.target_user_id)!==String(u.id)||Number(p.delta)!==b.delta)throw fail('request_conflict',409);
+     return {ok:true,duplicate:true,balance:String(p.balance_after)};
+    }
     await c.query('INSERT INTO akira_control_sellers(user_id,contact,enabled) VALUES($1,$2,true) ON CONFLICT(user_id) DO UPDATE SET enabled=true',[u.id,'Official Akira Seller']).catch(()=>{});
     await c.query('UPDATE akira_users SET is_seller=true,updated_at=now() WHERE id=$1',[u.id]).catch(()=>{});
     await c.query('INSERT INTO akira_seller_wallets(user_id,balance) VALUES($1,0) ON CONFLICT(user_id) DO NOTHING',[u.id]);
@@ -508,6 +568,7 @@ export async function controlRoutes(req,url,send){
     const next=Number(sw.rows[0]?.balance||0)+b.delta;
     if(!Number.isSafeInteger(next)||next<0)throw fail('insufficient_seller_balance',409);
     await c.query('UPDATE akira_seller_wallets SET balance=$2,updated_at=now() WHERE user_id=$1',[u.id,next]);
+    await c.query('INSERT INTO akira_control_admin_seller_funding_requests(admin_user_id,request_key,target_user_id,delta,balance_after) VALUES($1,$2,$3,$4,$5)',[user.id,key,u.id,b.delta,next]);
     await c.query('INSERT INTO akira_seller_funding_audit(seller_user_id,admin_user_id,delta,balance_after,reason,reference_key) VALUES($1,$2,$3,$4,$5,$6)',[u.id,user.id,b.delta,next,reason,key]).catch(()=>{});
     await audit(c,a,'seller-funds:'+b.delta+':'+reason,b.id);
     return {ok:true,balance:String(next)};
@@ -517,10 +578,6 @@ export async function controlRoutes(req,url,send){
     else{const r=await c.query('INSERT INTO akira_control_catalog(kind,name,description,asset,price,enabled) VALUES($1,$2,$3,$4,$5,$6) RETURNING id',[b.kind,b.name,b.description,b.asset,b.price,b.enabled]);b.id=r.rows[0].id;}
    }else if(section==='reports'){
     if(!ident(b.id)||!['open','resolved','dismissed'].includes(b.status))throw fail('invalid_report');await c.query('UPDATE akira_control_reports SET status=$1 WHERE id=$2',[b.status,b.id]);
-   }else if(section==='gift-policy'){
-    if(typeof b.allowSelfGifts!=='boolean'||typeof b.allowOtherGifts!=='boolean')throw fail('invalid_gift_policy');
-    await c.query('UPDATE akira_control_gift_policy SET allow_self_gifts=$1,allow_other_gifts=$2 WHERE id=1',
-      [b.allowSelfGifts,b.allowOtherGifts]);b.id=1;
    }else if(section==='settings'){
     if(!Number.isInteger(b.coins_per_100)||b.coins_per_100<1||b.coins_per_100>100)throw fail('invalid_exchange_rate');await c.query('UPDATE akira_control_exchange SET coins_per_100=$1 WHERE id=1',[b.coins_per_100]);b.id=1;
    }else if(section==='games'){

@@ -10,9 +10,14 @@
     a=String(a||'');
     return (/^https:\/\/[^\s"'<>]+$/i.test(a)||/^\/?assets\/[a-zA-Z0-9_./-]+$/.test(a))?a:null;
   };
+  const bundledUrl=a=>{
+    const raw=String(a||'');
+    const m=raw.match(/^https:\/\/raw\.githubusercontent\.com\/soverixnet-design\/sovera-voice-app\/[0-9a-f]{40}\/assets\/effects\/([a-z0-9-]+\.(?:webp|png))$/i);
+    return m?'assets/sovera/effects/'+m[1]:raw;
+  };
   const assetHTML=(a,cl)=>{
     const url=imageUrl(a);
-    return url?'<img class="'+cl+'" src="'+esc(url)+'" alt="" loading="lazy">':
+    return url?'<img class="'+cl+'" src="'+esc(bundledUrl(url))+'" data-sovera-fallback="'+esc(url)+'" alt="" loading="lazy">':
       '<span class="'+cl+'">'+(String(a||'').length<=8?esc(a):'✨')+'</span>';
   };
   async function api(path,data){
@@ -58,7 +63,8 @@
       if(!url)continue;
       host.classList.add('akira-v8-frame-host');
       const frame=document.createElement('img');
-      frame.className='akira-v8-frame';frame.src=url;frame.alt='Equipped avatar frame';
+      frame.className='akira-v8-frame';frame.src=bundledUrl(url);frame.alt='Equipped avatar frame';
+      frame.onerror=()=>{if(frame.src!==url)frame.src=url};
       frameBox(frame,host,url);
       host.appendChild(frame);
     }
@@ -78,6 +84,7 @@
           '<button data-item="'+esc(id)+'" '+(!id||equip?'disabled':'')+'>'+(!mine?'Buy':equip?'Equipped':'Equip')+'</button></div>';
       }).join(''):'<p class="lbl">No '+(lastKind==='frame'?'frames':'entry effects')+' published by admin yet.</p>')+'</div>'+
       '<p class="lbl">Frames and entry effects come from the real Akira admin catalogue and wallet.</p>';
+    sh.querySelectorAll('img[data-sovera-fallback]').forEach(img=>{img.onerror=()=>{if(img.getAttribute('src')!==img.dataset.soveraFallback)img.src=img.dataset.soveraFallback}});
     sh.querySelectorAll('[data-kind]').forEach(el=>el.addEventListener('click',()=>{lastKind=el.dataset.kind;render()}));
     sh.querySelectorAll('[data-item]').forEach(el=>el.addEventListener('click',()=>{void transact(el.dataset.item)}));
   }
@@ -122,7 +129,7 @@
     entry.setAttribute('role','status');
     entry.setAttribute('aria-label','Voice room entrance animation');
     const visual=document.createElement('img');
-    visual.src=url;visual.alt=equipped.name||'Room entrance';
+    visual.src=bundledUrl(url);visual.onerror=()=>{if(visual.src!==url)visual.src=url};visual.alt=equipped.name||'Room entrance';
     visual.className='akira-v8-entry-art';
     visual.style.animationDuration=duration+'ms';
     entry.appendChild(visual);

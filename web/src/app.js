@@ -286,6 +286,37 @@ $("plus").onclick=function(){if(A.myRoom){tab=2;$("tabs").querySelectorAll("butt
 /* ===== Daily reward, recharge, invite ===== */
 var DR=[100,150,200,300,400,600,1000];
 function today(){return new Date().toISOString().slice(0,10)}
+// Admin-published daily tasks use server proofs and the original wallet ledger.
+async function appendVerifiedDailyTasks(token){
+  var sh=$("sh");if(!sh||!token)return;
+  var box=sh.querySelector("#akiraDailyTasks");
+  if(!box){box=document.createElement("section");box.id="akiraDailyTasks";box.style.cssText="margin:15px 0;padding:11px;border:1px solid #ffffff35;border-radius:14px";sh.appendChild(box)}
+  box.innerHTML='<h4>📅 Daily Tasks</h4><p class="lbl">Loading administrator rewards…</p>';
+  try{
+    var data=await akiraRequest("/api/v1/community/tasks","GET",undefined,token);
+    if(!box.isConnected)return;
+    var tasks=Array.isArray(data.items)?data.items:[];
+    box.innerHTML='<h4>📅 Daily Tasks</h4>'+(tasks.length?tasks.map(function(t){
+      var amount=Number(t.coins||0),id=String(t.id||"");
+      if(!/^\\d{1,18}$/.test(id)||!Number.isSafeInteger(amount)||amount<0)return "";
+      return '<div class="row" style="display:flex;align-items:center;gap:7px;margin:9px 0"><span style="flex:1;min-width:0">'+esc(t.title||"Daily Task")+'<small style="display:block">🪙 '+bn(amount)+' coins</small></span>'+
+        '<button type="button" data-verified-task="'+esc(id)+'" '+(t.claimed?'disabled':'')+' style="padding:9px;border-radius:9px;background:#7c3aed;color:white;border:0">'+(t.claimed?'Claimed ✓':'Claim')+'</button></div>';
+    }).join(""):'<p class="lbl">No daily tasks enabled by Admin yet.</p>');
+    box.querySelectorAll("[data-verified-task]:not([disabled])").forEach(function(button){
+      button.onclick=async function(){
+        if(button.disabled)return;button.disabled=true;
+        try{
+          var result=await akiraRequest("/api/v1/community/tasks/claim","POST",{taskId:button.dataset.verifiedTask},token);
+          if(!result?.ok)throw Error("Reward not confirmed by server");
+          toast(result.duplicate?"Already claimed ✓":"+"+bn(result.amount||0)+" real coins received ✓");
+          window.dispatchEvent(new Event("akira:wallet-updated"));
+          if(window.akiraRefreshWallet)void window.akiraRefreshWallet();
+          appendVerifiedDailyTasks(token);
+        }catch(err){button.disabled=false;toast("Task: "+(err.message||"Requirement not met"))}
+      };
+    });
+  }catch(err){if(box.isConnected)box.innerHTML='<h4>📅 Daily Tasks</h4><p class="lbl">'+esc(err.message||"Task service unavailable")+'</p>'}
+}
 function dailySheet(){
   openSheet('<h3>🎁 Daily check-in</h3><p style="padding:12px">Checking verified daily coin rewards…</p>');
   var token=typeof window.akiraToken==='function'?window.akiraToken():'';
@@ -315,10 +346,11 @@ function dailySheet(){
         dailySheet();
       }catch(err){button.disabled=false;toast('Reward: '+(err.message||'Server unavailable'))}
     };
+    appendVerifiedDailyTasks(token);
   }
   window.akiraRequest('/api/v1/rewards/daily','GET',undefined,token)
     .then(function(d){if(!d||!d.ok)throw Error('Daily rewards unavailable');showStatus(d)})
-    .catch(function(err){openSheet('<h3>🎁 Daily check-in</h3><p style="padding:12px">Real daily rewards are not available: '+esc(err.message||'Server unavailable')+'</p>')});
+    .catch(function(err){openSheet('<h3>🎁 Daily check-in</h3><p style="padding:12px">Real daily rewards are not available: '+esc(err.message||'Server unavailable')+'</p>');appendVerifiedDailyTasks(token)});
 }
 var RCT=0,RATE=0.5,akiraServerDiamonds=null,N=function(n){return Number(n||0).toLocaleString("en-US")};
 function curDia(){return akiraServerDiamonds!==null?akiraServerDiamonds:(RS().dia||0)}

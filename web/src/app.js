@@ -86,6 +86,7 @@ async function openRoom(r){
   cur=r;
   $("rf").src="room.html";
   resumeRoom();
+  window.akiraEquipment?.showEntry?.();
 }
 function resumeRoom(){
   $("rw").classList.add("on");$("mini").classList.remove("on");

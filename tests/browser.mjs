@@ -188,6 +188,7 @@ try{
         'access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'authorization,content-type'};
       if(request.method()==='OPTIONS')return route.fulfill({status:204,headers});
       if(path==='/api/v1/rooms/100001/seat'&&request.method()==='POST')taken=true;
+      if(path==='/api/v1/auth/me')return route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({user:{id:'100002',displayName:'My Real ID'}})});
       const state={ok:true,roomId:'100001',seatCount:10,ownerId:'1',name:'Live Test Room',themeKey:'ocean',
         seats:taken?[{seatNo:1,publicId:'100002',displayName:'My Real ID'}]:[],
         members:[{publicId:'100002',displayName:'My Real ID'}]};
@@ -197,7 +198,9 @@ try{
     await page.evaluate(()=>{
       AkiraBridge.setContext({id:'100001',ownerId:'100001',userId:'100002',name:'Live Test Room',
         voiceApi:'https://api.soverixnet.online',voiceAuth:'A'.repeat(43)});
+      return window.akiraRoomVerify();
     });
+    await page.waitForFunction(()=>document.documentElement.classList.contains('akira-room-authenticated'));
     // CI has no physical mic. Only permission is mocked, not server seat ownership.
     await page.evaluate(()=>{window.akiraEnsureMicPermission=async()=>true});
     await page.addScriptTag({url:'http://127.0.0.1:4174/src/room-live.js'});

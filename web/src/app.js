@@ -298,7 +298,7 @@ async function appendVerifiedDailyTasks(token){
     var tasks=Array.isArray(data.items)?data.items:[];
     box.innerHTML='<h4>📅 Daily Tasks</h4>'+(tasks.length?tasks.map(function(t){
       var amount=Number(t.coins||0),id=String(t.id||"");
-      if(!/^\\d{1,18}$/.test(id)||!Number.isSafeInteger(amount)||amount<0)return "";
+      if(!/^\d{1,18}$/.test(id)||!Number.isSafeInteger(amount)||amount<0)return "";
       return '<div class="row" style="display:flex;align-items:center;gap:7px;margin:9px 0"><span style="flex:1;min-width:0">'+esc(t.title||"Daily Task")+'<small style="display:block">🪙 '+bn(amount)+' coins</small></span>'+
         '<button type="button" data-verified-task="'+esc(id)+'" '+(t.claimed?'disabled':'')+' style="padding:9px;border-radius:9px;background:#7c3aed;color:white;border:0">'+(t.claimed?'Claimed ✓':'Claim')+'</button></div>';
     }).join(""):'<p class="lbl">No daily tasks enabled by Admin yet.</p>');

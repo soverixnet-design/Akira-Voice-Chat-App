@@ -1,3 +1,4 @@
+import './import-sovera-cosmetics.mjs';
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { build } from 'esbuild';
@@ -16,4 +17,4 @@ await writeFile('dist/vendor/livekit-client.umd.min.js',sdk);
 
 await build({entryPoints:['web/src/native.mjs'],bundle:true,outfile:'dist/src/native.js',format:'esm',target:'es2022'});
 await rm('dist/src/native.mjs');
-console.log('Built dist/ (prototype, no backend connection).');
+console.log('Built Akira dist with original Sovera frames/entries and pinned LiveKit SDK.');

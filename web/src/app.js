@@ -179,18 +179,41 @@ function sellerSheet(){
 }
 $("hc").onclick=function(){rechargeSheet()};
 function inviteSheet(){
-  var url='https://voice.soverixnet.online/';
-  openSheet('<h3>🤝 Invite a friend</h3><div style="font-size:13.5px;line-height:1.7">'+
-    'Share the Akira home page with friends. Invite tracking and rewards are not enabled yet; no referral coins are promised.'+
-    '</div><div class="idp" style="margin-top:12px">Your ID: <b>'+esc(A.id)+'</b></div>'+
-    '<div style="padding:10px 0;font-size:13px">Verified invites: Not available yet</div>'+
-    '<button class="big" id="sv">📤 Share Akira</button>');
-  $("sv").onclick=function(){
-    var t='Join me on Akira Voice Chat App! '+url;
-    if(navigator.share)navigator.share({text:t,url:url}).catch(function(){});
-    else if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(function(){toast('Link copied ✓')}).catch(function(){toast(url)});
-    else toast(url);
-  };
+  var url='https://voice.soverixnet.online/',token=typeof window.akiraToken==='function'?window.akiraToken():'';
+  openSheet('<h3>🤝 Invite friends</h3><p style="padding:12px">Loading verified invite count…</p>');
+  function show(status,warning){
+    var count=status&&Number.isSafeInteger(Number(status.verifiedInvites))?String(status.verifiedInvites):'Not available';
+    var canApply=status&&status.canEnterCode===true;
+    var shareCode=String(A.id||'');
+    openSheet('<h3>🤝 Invite friends</h3>'+
+      '<p style="font-size:13px;line-height:1.6">Invite a friend with your ID. They must enter it after signing in. Only verified registrations are counted. No coin bonus is promised.</p>'+
+      '<div class="idp" style="margin:10px 0">Your invite ID: <b>'+esc(shareCode)+'</b></div>'+
+      '<div class="idp" style="margin:10px 0">Verified invites: <b>'+esc(count)+'</b></div>'+
+      (status&&status.invitedBy?'<div style="padding:9px">You were invited by ID '+esc(status.invitedBy)+'</div>':'')+
+      (warning?'<p style="color:#fda4af;font-size:12px">'+esc(warning)+'</p>':'')+
+      '<button class="big" id="sv">📤 Share Akira & my ID</button>'+
+      (canApply?'<div style="margin-top:15px"><label>Have a friend’s invite ID?</label><input class="field" inputmode="numeric" maxlength="18" id="invCode" placeholder="Enter 6-digit or longer ID"><button class="big" id="invClaim">Confirm invite code</button></div>':''));
+    $("sv").onclick=function(){
+      var text='Join Akira Voice Chat. My invite ID is '+shareCode+'. After creating an account, open Invite and enter that ID.';
+      if(navigator.share)navigator.share({text:text,url:url}).catch(function(){});
+      else if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text+' '+url)
+        .then(function(){toast('Invite copied ✓')}).catch(function(){toast(url)});
+      else toast(url);
+    };
+    if(canApply)$("invClaim").onclick=async function(){
+      var code=String($("invCode").value||'').trim();
+      if(!/^\\d{6,18}$/.test(code)){toast('Enter a valid user ID');return}
+      var button=$("invClaim");button.disabled=true;
+      try{
+        await window.akiraRequest('/api/v1/referrals/claim','POST',{inviteCode:code},token);
+        toast('Invite verified ✓');inviteSheet();
+      }catch(e){button.disabled=false;toast('Invite: '+(e.message||'Verification failed'))}
+    };
+  }
+  if(!token||typeof window.akiraRequest!=='function'){show(null,'Sign in to see your verified invite count.');return}
+  window.akiraRequest('/api/v1/referrals','GET',undefined,token)
+    .then(function(data){if(!data||!data.ok)throw Error('Invite tracking unavailable');show(data,'')})
+    .catch(function(err){show(null,'Invite tracking is not active on the server: '+(err.message||'Unavailable'))});
 }
 $("qd").onclick=dailySheet;$("qr").onclick=rechargeSheet;$("qi").onclick=inviteSheet;$("qg").onclick=function(){toast("Enter a room and play games 🎮")};
 /* ===== Ranking ===== */

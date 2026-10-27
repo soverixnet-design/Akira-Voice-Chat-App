@@ -11,14 +11,15 @@ const securityHeaders={
 export function serveAdmin(req,res,url){
   if(req.method!=='GET')return false;
   let file;
-  if(['/admin-v2','/admin-v2/'].includes(url.pathname))file='./admin-v2.html';
+  if(['/admin-v8','/admin-v8/'].includes(url.pathname))file='./admin-v8.html';
+  else if(['/admin-v2','/admin-v2/'].includes(url.pathname))file='./admin-v2.html';
   else if(['/admin','/admin/'].includes(url.pathname))file='./admin.html';
   else if(['/admin-legacy','/admin-legacy/'].includes(url.pathname))file='./admin-legacy.html';
   else return false;
   let target=new URL(file,import.meta.url);
   // Preserve original live admin HTML; when absent in a clean checkout,
-  // serve the maintained web admin only for the main /admin route.
-  if(!existsSync(target) && file==='./admin.html')target=new URL('../../web/admin.html',import.meta.url);
+  // fall back to the packaged current V8 UI only for the main /admin route.
+  if(!existsSync(target) && file==='./admin.html')target=new URL('./admin-v8.html',import.meta.url);
   if(!existsSync(target))return false;
   res.writeHead(200,securityHeaders);
   res.end(readFileSync(target));

@@ -16,7 +16,10 @@ try{
     await page.addInitScript(()=>localStorage.setItem('vr_guest','1'));
     await page.goto('http://127.0.0.1:4174');
     await page.locator('#sp').waitFor({state:'attached'});
-    await page.waitForFunction(()=>document.getElementById('sp').classList.contains('off'));
+    try { await page.waitForFunction(()=>document.getElementById('sp').classList.contains('off'), { timeout: 6000 }); }
+    catch (err) {
+      throw new Error('Splash did not finish. JavaScript errors: '+JSON.stringify(errors)+'; HTML: '+await page.locator('html').getAttribute('class')+'; auth: '+await page.locator('#au').getAttribute('class')+'; splash: '+await page.locator('#sp').getAttribute('class'), {cause:err});
+    }
     await page.locator('#au.on').waitFor();
     assert.equal(await page.locator('#wgs, #ag').count(),0);
     assert.equal(await page.locator('#v-home').isVisible(),false);

@@ -54,20 +54,45 @@
     frame.style.left=(50-50*zoom)+'%';
     frame.style.top=(50-g[1]*zoom*100)+'%';
   }
+  const foreign=new Map();
+  function drawFrame(host,item){
+    if(!host)return;
+    host.querySelectorAll('.akira-v8-frame').forEach(x=>x.remove());
+    if(!item)return;
+    const url=imageUrl(item.asset);if(!url)return;
+    host.classList.add('akira-v8-frame-host');
+    const frame=document.createElement('img');
+    frame.className='akira-v8-frame';frame.src=bundledUrl(url);frame.alt='Equipped avatar frame';
+    frame.onerror=()=>{if(frame.getAttribute('src')!==url)frame.src=url};
+    frameBox(frame,host,url);
+    host.appendChild(frame);
+  }
   function apply(){
-    const item=selected('frame');
-    for(const host of document.querySelectorAll('#v-me .mav, #pfc .pavw')){
-      host.querySelectorAll('.akira-v8-frame').forEach(x=>x.remove());
-      if(!item)continue;
-      const url=imageUrl(item.asset);
-      if(!url)continue;
-      host.classList.add('akira-v8-frame-host');
-      const frame=document.createElement('img');
-      frame.className='akira-v8-frame';frame.src=bundledUrl(url);frame.alt='Equipped avatar frame';
-      frame.onerror=()=>{if(frame.src!==url)frame.src=url};
-      frameBox(frame,host,url);
-      host.appendChild(frame);
+    drawFrame(document.querySelector('#v-me .mav'),selected('frame'));
+    const root=document.getElementById('pfc');
+    if(root?.dataset.akiraCosmeticMine==='true')drawFrame(root.querySelector('.pavw'),selected('frame'));
+  }
+  function decorate(root,model,mine){
+    const host=root.querySelector(root.id==='v-me'?'.mav':'.pavw');
+    if(!host)return;
+    if(mine){
+      root.dataset.akiraCosmeticMine='true';
+      drawFrame(host,selected('frame'));return;
     }
+    root.dataset.akiraCosmeticMine='false';
+    const id=number(model?.id);
+    root.dataset.akiraCosmeticUser=id;
+    drawFrame(host,null);
+    if(!id)return;
+    const cached=foreign.get(id);
+    if(cached){
+      drawFrame(host,cached.find(item=>item.kind==='frame'));return;
+    }
+    api('/api/v1/community/user-cosmetics?id='+encodeURIComponent(id)).then(data=>{
+      const items=Array.isArray(data.items)?data.items:[];foreign.set(id,items);
+      if(root.dataset.akiraCosmeticUser===id&&root.dataset.akiraCosmeticMine==='false')
+        drawFrame(root.querySelector('.pavw'),items.find(item=>item.kind==='frame'));
+    }).catch(()=>{});
   }
   function render(){
     const sh=document.getElementById('sh');
@@ -140,7 +165,7 @@
     const removal=setTimeout(()=>entry.remove(),duration);
     close.addEventListener('click',()=>clearTimeout(removal),{once:true});
   }
-  window.akiraEquipment={open,refresh,showEntry,decorate:()=>{if(loaded)apply()}};
+  window.akiraEquipment={open,refresh,showEntry,decorate};
 
   const style=document.createElement('style');
   style.textContent='.akira-v8-categories{display:flex;gap:8px;margin:8px 0 14px}.akira-v8-categories button{flex:1;padding:11px;border:1px solid #6d4ae5;border-radius:12px;color:white;background:#241747}.akira-v8-categories .on{background:linear-gradient(135deg,#7c3aed,#d946ef)}.akira-v8-items{display:grid;gap:9px;max-height:45vh;overflow:auto}.akira-v8-item{display:flex;align-items:center;gap:12px;padding:10px;border:1px solid #ffffff30;border-radius:14px;background:#ffffff13}.akira-v8-icon{width:54px;height:54px;object-fit:contain;display:grid;place-items:center;font-size:34px}.akira-v8-item-text{flex:1;min-width:0}.akira-v8-item-text b,.akira-v8-item-text small{display:block}.akira-v8-item-text small{opacity:.7}.akira-v8-item button{border:0;border-radius:9px;padding:10px;background:#a855f7;color:white}.akira-v8-item button:disabled{opacity:.6}.akira-v8-frame-host{position:relative!important}.akira-v8-frame{position:absolute!important;object-fit:contain!important;pointer-events:none!important;z-index:6!important;animation:akira-v8-appear 3s ease-in-out 1}.akira-v8-frame-host .lvbadge{z-index:7}@keyframes akira-v8-appear{0%{filter:brightness(1)}50%{filter:brightness(1.55)}100%{filter:brightness(1)}}#akira-v8-room-entry{position:fixed;inset:0;display:grid;place-items:center;z-index:10003;pointer-events:none;background:linear-gradient(0deg,transparent,#0003)}.akira-v8-entry-art{width:min(100vw,500px);height:100dvh;object-fit:contain;animation:akira-v8-arrive 3.2s ease-out forwards}.akira-v8-entry-close{position:absolute;right:20px;top:42px;border:1px solid #fff8;color:white;border-radius:50%;width:36px;height:36px;background:#0008;pointer-events:auto}@keyframes akira-v8-arrive{0%{opacity:0;transform:translateY(24px) scale(.95);filter:brightness(1.8)}18%{opacity:1;transform:translateY(0) scale(1)}77%{opacity:1;filter:brightness(1)}100%{opacity:0}}@media(prefers-reduced-motion:reduce){.akira-v8-entry-art{animation:none!important;opacity:1}}';

@@ -13,6 +13,8 @@ export async function setSellerStatus(adminId, publicId, enabled, pool = getPool
     }
     const sellerId=found.rows[0].id;
     await db.query('INSERT INTO akira_seller_wallets(user_id,balance,enabled) VALUES($1,0,$2) ON CONFLICT(user_id) DO UPDATE SET enabled=$2,updated_at=now()',[sellerId,enabled]);
+    await db.query('INSERT INTO akira_control_sellers(user_id,contact,enabled) VALUES($1,$2,$3) ON CONFLICT(user_id) DO UPDATE SET enabled=$3',[sellerId,'Official Akira Seller',enabled]);
+    await db.query('UPDATE akira_users SET is_seller=$1,updated_at=now() WHERE id=$2',[enabled,sellerId]);
     await db.query('INSERT INTO akira_admin_audit(actor_user_id,action,target_type,target_id) VALUES($1,$2,$3,$4)',[adminId,enabled?'seller_enabled':'seller_disabled','user',String(publicId)]);
     await db.query('COMMIT');
     return {status:200,ok:true,publicId:String(publicId),enabled};

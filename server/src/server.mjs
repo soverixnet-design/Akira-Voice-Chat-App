@@ -356,8 +356,14 @@ export const requestHandler = async (req, res) => {
     return send(200, { ok: true, app: appId, service: 'api', startedAt });
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/status') {
-    return send(200, { app: appId, status: 'voice-integration-beta', productionReady: false,
-      enabled: ['health', 'status', 'database', 'room-read', 'room-create', 'room-join', 'room-leave', 'email-auth', 'voice-token'], pending: ['voice-provider-configuration', 'wallet', 'gifts', 'admin'] });
+    return send(200, { app: appId, status: 'v8-integration-candidate', productionReady: false,
+      routes: ['email-auth','google-auth','room-seats','voice-token','wallet','seller-transfer','community-gifts','food-wheel','admin'],
+      configured: {
+        googleOAuth: Boolean(googleClientId()),
+        liveKit: Boolean(process.env.AKIRA_LIVEKIT_API_KEY && process.env.AKIRA_LIVEKIT_API_SECRET && /^wss:\\/\\//.test(process.env.AKIRA_LIVEKIT_URL || '')),
+        gameEngine: process.env.AKIRA_GAME_ENGINE_ENABLED === 'true'
+      },
+      note: 'Configured status is not a substitute for authenticated end-to-end checks' });
   }
   if (req.method === 'GET' && url.pathname === '/api/v1/rooms') {
     try { const actor=await authenticate(req.headers.authorization);if(!actor)return send(401,{error:'unauthorized'});return send(200, { app: appId, rooms: await listRooms() }); }

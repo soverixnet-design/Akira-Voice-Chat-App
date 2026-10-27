@@ -24,7 +24,9 @@ test('wallet shows real balance and compact units without local minting',()=>{
 test('Food Wheel and Jackpot cannot spend offline demo coins',()=>{
   const food=file('web/food-wheel/game.js');
   const jackpot=file('web/jackpot-fruit/index.html');
-  assert.match(food,/if \(!akiraToken \|\| !akiraLiveActive\) \{ toast\('Live game server unavailable'\); return false;/);
+  assert.match(food,/fetchAkiraJson\|syncAkiraServerState|akiraApi\('\/games\/food-wheel\/bets'/);
+  assert.doesNotMatch(food,/demoStartBetting\(\);\s*return/);
+  assert.match(food,/akiraLiveActive/);
   assert.match(food,/maxBetPerRound: Number\.MAX_SAFE_INTEGER/);
   assert.match(jackpot,/if\(!akiraToken\|\|!akiraLive\)return msg\('Live game server unavailable'\)/);
   assert.match(jackpot,/if\(!serverSettled\)/);

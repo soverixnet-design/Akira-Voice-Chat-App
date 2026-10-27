@@ -548,7 +548,7 @@ export async function controlRoutes(req,url,send){
     const u=await target(c,b.id);const contact=text(b.contact,200)?b.contact.trim():'Official Akira Seller';if(typeof b.enabled!=='boolean')throw fail('invalid_seller');
     await c.query('INSERT INTO akira_control_sellers(user_id,contact,enabled) VALUES($1,$2,$3) ON CONFLICT(user_id) DO UPDATE SET contact=excluded.contact,enabled=excluded.enabled',[u.id,contact,b.enabled]);
     await c.query('UPDATE akira_users SET is_seller=$1,updated_at=now() WHERE id=$2',[b.enabled,u.id]).catch(()=>{});
-    await c.query('INSERT INTO akira_seller_wallets(user_id,balance) VALUES($1,0) ON CONFLICT(user_id) DO NOTHING',[u.id]).catch(()=>{});
+    await c.query('INSERT INTO akira_seller_wallets(user_id,balance,enabled) VALUES($1,0,$2) ON CONFLICT(user_id) DO UPDATE SET enabled=$2,updated_at=now()',[u.id,b.enabled]);
    }else if(section==='seller-funds'){
     const key=requestKey(b);
     await c.query('SELECT id FROM akira_users WHERE id=$1 FOR UPDATE',[user.id]);
@@ -563,7 +563,7 @@ export async function controlRoutes(req,url,send){
     }
     await c.query('INSERT INTO akira_control_sellers(user_id,contact,enabled) VALUES($1,$2,true) ON CONFLICT(user_id) DO UPDATE SET enabled=true',[u.id,'Official Akira Seller']).catch(()=>{});
     await c.query('UPDATE akira_users SET is_seller=true,updated_at=now() WHERE id=$1',[u.id]).catch(()=>{});
-    await c.query('INSERT INTO akira_seller_wallets(user_id,balance) VALUES($1,0) ON CONFLICT(user_id) DO NOTHING',[u.id]);
+    await c.query('INSERT INTO akira_seller_wallets(user_id,balance,enabled) VALUES($1,0,true) ON CONFLICT(user_id) DO UPDATE SET enabled=true,updated_at=now()',[u.id]);
     const sw=await c.query('SELECT balance FROM akira_seller_wallets WHERE user_id=$1 FOR UPDATE',[u.id]);
     const next=Number(sw.rows[0]?.balance||0)+b.delta;
     if(!Number.isSafeInteger(next)||next<0)throw fail('insufficient_seller_balance',409);

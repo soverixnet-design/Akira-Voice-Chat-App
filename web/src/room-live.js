@@ -78,18 +78,23 @@
   finally{updating=false}
  }
  async function actSeat(body){
+  // Seat membership is server-owned. A missing mic permission must not prevent
+  // an authenticated user from sitting; keep their mic muted until consent.
+  let permitted=true;
   if(body.leave!==true && typeof window.akiraEnsureMicPermission==='function'){
-   if(!await window.akiraEnsureMicPermission())return;
+   permitted=await window.akiraEnsureMicPermission();
   }
   try{
    const state=await request('POST','seat',body);
-   myMute=body.leave===true;
+   myMute=body.leave===true||!permitted;
    draw(state);
    if(!myMute){
-    if(!akiraVoiceRoom){akiraStartVoice();}
+    if(!akiraVoiceRoom){void akiraStartVoice();}
     else await syncMic();
    }
-   notify(body.leave===true?'Left microphone seat':'Seat joined — microphone on');
+   notify(body.leave===true?'Left microphone seat':
+     !permitted?'Seat joined muted. Grant microphone permission to speak.':
+     akiraVoiceRoom?'Seat joined — microphone on':'Seat joined — connecting voice…');
   }catch(e){notify('Seat: '+e.message);await refresh()}
  }
  const sheet=window.seatSheet;

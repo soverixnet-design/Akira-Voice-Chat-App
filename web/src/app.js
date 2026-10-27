@@ -66,9 +66,45 @@ var bi=0,bpause=false;
 $("ban").innerHTML=CFG.banners.map(function(b,i){return'<div class="slide" data-i="'+i+'" style="background:linear-gradient(135deg,'+b.c+')"><b>'+b.t+'</b><small>'+b.s+'</small><i>'+b.e+'</i></div>'}).join("");
 $("dots").innerHTML=CFG.banners.map(function(_,i){return"<u"+(i?"":' class="on"')+"></u>"}).join("");
 $("ban").onscroll=function(){var w=this.children[0].offsetWidth+10;bi=Math.round(this.scrollLeft/w);document.querySelectorAll("#dots u").forEach(function(d,i){d.classList.toggle("on",i===bi)})};
-$("ban").onclick=function(e){var s=e.target.closest(".slide");if(!s)return;var a=CFG.banners[+s.dataset.i].a;if(a==="daily")dailySheet();if(a==="recharge")rechargeSheet();if(a==="rank")go("rank")};
+$("ban").onclick=function(e){var s=e.target.closest(".slide");if(!s)return;var item=CFG.banners[+s.dataset.i];if(!item)return;var a=item.a;if(a==="daily")dailySheet();if(a==="recharge")rechargeSheet();if(a==="rank")go("rank");if(a==="managed"){openSheet('<h3>'+esc(item.t)+'</h3><p class="lbl">'+esc(item.s)+'</p>');if(item.asset){var im=document.createElement("img");im.src=item.asset;im.alt=item.t;im.style.cssText="display:block;width:100%;max-height:260px;object-fit:contain;border-radius:12px;margin-top:12px";$("sh").appendChild(im)}}};
+/* Official notices and banners come from the real Super Admin database, not local settings. */
+async function loadAdminPublishedContent(){
+  if(!window.__akiraAuthVerified||!akiraToken())return;
+  try{
+    var response=await akiraRequest("/api/v1/community/content","GET",undefined,akiraToken());
+    if(!response||!Array.isArray(response.items))throw new Error("Invalid content list");
+    var items=response.items;
+    var managedBanners=items.filter(function(x){return x.kind==="banner"&&typeof x.title==="string"}).slice(0,8);
+    CFG.banners=managedBanners.map(function(x,i){return {t:x.title,s:String(x.body||""),asset:String(x.asset||""),e:"📢",a:"managed",c:["#9b4dff,#ff3dc8","#0ea5e9,#6366f1","#059669,#14b8a6"][i%3]}});
+    var slides=$("ban"),dots=$("dots");
+    slides.replaceChildren();dots.replaceChildren();bi=0;
+    CFG.banners.forEach(function(item,i){
+      var slide=document.createElement("div");slide.className="slide";slide.dataset.i=String(i);
+      slide.style.background="linear-gradient(135deg,"+item.c+")";
+      if(item.asset && (/^https:\/\//.test(item.asset)||/^data:image\/(?:png|jpe?g|webp|gif);base64,/.test(item.asset))){
+        var photo=document.createElement("img");photo.src=item.asset;photo.alt="";
+        photo.style.cssText="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.28;pointer-events:none";
+        slide.style.position="relative";slide.appendChild(photo);
+      }
+      [["b",item.t],["small",item.s],["i",item.e]].forEach(function(pair){var node=document.createElement(pair[0]);node.textContent=pair[1];node.style.position="relative";node.style.zIndex="1";slide.appendChild(node)});
+      slides.appendChild(slide);
+      var dot=document.createElement("u");if(!i)dot.className="on";dots.appendChild(dot);
+    });
+    var notes=items.filter(function(x){return x.kind==="notice"&&typeof x.title==="string"}).slice(0,5);
+    var host=document.getElementById("akiraOfficialNotices");
+    if(!host){host=document.createElement("section");host.id="akiraOfficialNotices";host.style.cssText="margin:10px 12px;padding:10px 12px;background:rgba(27,15,64,.75);border:1px solid rgba(255,255,255,.16);border-radius:12px";$("ban").parentElement.insertAdjacentElement("afterend",host)}
+    host.replaceChildren();host.style.display=notes.length?"block":"none";
+    if(notes.length){var title=document.createElement("strong");title.textContent="🔔 Official Notice";host.appendChild(title)}
+    notes.forEach(function(note){var line=document.createElement("div");line.style.cssText="padding:6px 0;border-bottom:1px solid rgba(255,255,255,.1)";
+      var name=document.createElement("b");name.textContent=note.title;var body=document.createElement("p");body.className="lbl";body.textContent=String(note.body||"");
+      line.append(name,body);host.appendChild(line);
+    });
+  }catch(error){console.warn("Official content sync skipped:",error.message)}
+}
+setTimeout(loadAdminPublishedContent,2400);
+setInterval(loadAdminPublishedContent,60000);
 $("ban").addEventListener("touchstart",function(){bpause=true});$("ban").addEventListener("touchend",function(){setTimeout(function(){bpause=false},3000)});
-setInterval(function(){if(bpause||!$("v-home").classList.contains("on"))return;bi=(bi+1)%CFG.banners.length;var b=$("ban");b.scrollTo({left:bi*(b.children[0].offsetWidth+10),behavior:"smooth"})},4200);
+setInterval(function(){if(bpause||!$("v-home").classList.contains("on")||!CFG.banners.length)return;bi=(bi+1)%CFG.banners.length;var b=$("ban");b.scrollTo({left:bi*(b.children[0].offsetWidth+10),behavior:"smooth"})},4200);
 /* ===== Room card (3D) ===== */
 var tab=0;
 function myR(){
@@ -1215,7 +1251,7 @@ async function enter(a,msg){
   try{localStorage.setItem(SESS_K,a.key);localStorage.setItem("vr_state_v2",JSON.stringify(a.state||{}))}catch(e){}
   A=Object.assign({name:"Me",pic:null,myRoom:null,claim:{d:"",streak:0}},a.p);fixA();try{localStorage.setItem("vr_app_v1",JSON.stringify(A))}catch(e){}
   window.__akiraAuthVerified=true;document.documentElement.classList.add('akira-auth-verified');
-  hideAuth();refresh();akiraSyncWallet();if(window.akiraLoadProfile)window.akiraLoadProfile();
+  hideAuth();refresh();loadAdminPublishedContent();akiraSyncWallet();if(window.akiraLoadProfile)window.akiraLoadProfile();
   renderRooms();loadAkiraRooms();go("home");
   if(window.akiraEquipment)window.akiraEquipment.refresh().catch(function(){});
   toast(msg);
@@ -1315,7 +1351,7 @@ document.querySelectorAll("img[data-logo]").forEach(function(i){i.src=BRAND.logo
     A.pic=user.avatarUrl||user.avatar_url||A.pic;
     saveA();
     window.__akiraAuthVerified=true;document.documentElement.classList.add('akira-auth-verified');
-    hideAuth();refresh();loadAkiraRooms();
+    hideAuth();refresh();loadAdminPublishedContent();loadAkiraRooms();
     if(window.akiraEquipment)window.akiraEquipment.refresh().catch(function(){});
   }catch(_){
     window.__akiraAuthVerified=false;

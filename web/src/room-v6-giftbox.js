@@ -6,7 +6,17 @@
   var selected=new Set(),quantity=1,selectedGift='',sending=false;
   var escrow=function(x){return String(x===undefined||x===null?'':x).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
   var dom=function(s){return document.getElementById(s)};
-  var money=function(v){return Number(v||0).toLocaleString('en-US')};
+  // Keep the displayed balance exact. Coins may be much larger than 1M.
+  var coinNumber=function(v){
+    if(typeof v==='number'&&!Number.isSafeInteger(v))throw Error('Wallet balance needs an exact integer from server');
+    var s=String(v===undefined||v===null?'':v);
+    if(!/^[0-9]+$/.test(s))throw Error('Invalid wallet balance');
+    return BigInt(s);
+  };
+  var money=function(v){
+    try{return coinNumber(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g,',')}
+    catch(_){return '—'}
+  };
   var say=function(t){if(window.toast)window.toast(t)};
   var uuid=function(){return 'gift-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,13)};
   async function call(path,payload){
@@ -19,17 +29,25 @@
     if(!res.ok)throw Error(data.error||'Server unavailable');
     return data;
   }
-  function people(){
-    var list=[],known=new Set(),myId=String(ctx.userId||'');
-    function add(u,seat){
-      var id=String(u?.id||'');
-      if(!/^\d{6,18}$/.test(id)||id===myId||known.has(id))return;
+  // Read authoritative membership from the room API, including audience who
+  // are not on a microphone seat. Never use local demo/placeholder avatars.
+  async function people(){
+    if(!/^\d{6,18}$/.test(String(ctx.id||'')))throw Error('Room ID unavailable');
+    var snapshot=await call('/rooms/'+encodeURIComponent(String(ctx.id))+'/seats');
+    if(!Array.isArray(snapshot.members)||!Array.isArray(snapshot.seats))throw Error('Room users unavailable');
+    var own=String(ctx.userId||''),seatById=new Map(),known=new Set();
+    snapshot.seats.forEach(function(s){
+      if(/^\d{6,18}$/.test(String(s.publicId||''))&&Number.isInteger(Number(s.seatNo))){
+        seatById.set(String(s.publicId),Number(s.seatNo));
+      }
+    });
+    return snapshot.members.reduce(function(result,u){
+      var id=String(u.publicId||'');
+      if(!/^\d{6,18}$/.test(id)||id===own||known.has(id))return result;
       known.add(id);
-      list.push({id:id,name:String(u.n||u.name||'User'),seat:seat});
-    }
-    if(Array.isArray(window.seats))window.seats.forEach(function(u,i){if(u&&!u.empty&&u.real)add(u,i)});
-    if(Array.isArray(window.U))window.U.forEach(function(u){add(u,null)});
-    return list;
+      result.push({id:id,name:String(u.displayName||'User'),seat:seatById.has(id)?seatById.get(id):null});
+      return result;
+    },[]).sort(function(a,b){return (a.seat===null?99:a.seat)-(b.seat===null?99:b.seat)});
   }
   function ui(items,balance,users){
     var gifts=items.filter(function(it){return it&&it.kind==='gift'&&Number.isSafeInteger(Number(it.price))&&Number(it.price)>0&&
@@ -39,7 +57,7 @@
     if(!selectedGift||!gifts.some(function(g){return String(g.id)===selectedGift}))selectedGift=gifts.length?String(gifts[0].id):'';
     var recipients=users.map(function(u){
       return '<button type="button" class="chip'+(selected.has(u.id)?' sel':'')+'" data-guser="'+escrow(u.id)+'" style="max-width:122px">'+
-       '<div class="c" style="background:linear-gradient(145deg,#8b5cf6,#db2777)">👤</div>'+escrow(u.name)+'</button>';
+       '<div class="c" style="background:linear-gradient(145deg,#8b5cf6,#db2777)">👤</div>'+escrow(u.name)+'<small> ID '+escrow(u.id)+(u.seat===null?' · Audience':' · Seat '+(u.seat+1))+'</small></button>';
     }).join('');
     var h='<h3>🎁 Gift Box <small style="margin-left:auto;color:#fde68a">🪙 '+money(balance)+'</small></h3>'+
       '<div class="lbl">Send to real room users</div>'+
@@ -47,7 +65,7 @@
       '<div class="lbl">Available Gifts from Admin</div>'+
       '<div class="gifts" style="max-height:230px;overflow-y:auto">'+gifts.map(function(g){
        return '<button type="button" class="gf'+(String(g.id)===selectedGift?' sel':'')+'" data-giftid="'+escrow(g.id)+'">'+
-        '<span>'+(/^(?!https?:|data:).{1,8}$/.test(String(g.asset||''))?escrow(g.asset):'🎁')+'</span>'+
+        '<span>'+( /^https:\/\/[^\\s<>\"']+$/.test(String(g.asset||''))?'<img alt="" loading="lazy" style="width:42px;height:42px;object-fit:contain" src="'+escrow(g.asset)+'">':/^(?!https?:|data:).{1,8}$/.test(String(g.asset||''))?escrow(g.asset):'🎁')+'</span>'+
         '<b>'+escrow(g.name)+'</b><small>🪙 '+money(g.price)+'</small></button>';
       }).join('')+'</div>'+
       (gifts.length?'':'<div class="lbl">Admin has not enabled any paid gifts.</div>')+
@@ -76,10 +94,9 @@
     try{
       var result=await Promise.all([call('/community/catalog'),call('/wallet')]);
       var all=Array.isArray(result[0].items)?result[0].items:[];
-      var balance=Number(result[1].wallet?.balance);
-      if(!Number.isSafeInteger(balance)||balance<0)throw Error('Invalid wallet balance');
+      var balance=coinNumber(result[1].wallet?.balance).toString();
       selected.clear();
-      var users=people();if(users.length)selected.add(users[0].id);
+      var users=await people();
       ui(all,balance,users);
     }catch(e){window.open('<h3>🎁 Gift Box</h3><div class="lbl">'+escrow(e.message||'Gift catalog unavailable')+'</div>')}
   }
@@ -90,18 +107,19 @@
     if(!chosen||!targets.length){say('Select a gift and a real recipient');return}
     var price=Number(chosen.price),count=quantity;
     if(!Number.isSafeInteger(price)||price<=0||!Number.isSafeInteger(count)||count<1||count>10)return;
-    if(!confirm('Send '+money(price*count*targets.length)+' coins in gifts to '+targets.length+' user(s)?'))return;
+    var expected=BigInt(price)*BigInt(count)*BigInt(targets.length);
+    if(!confirm('Send '+money(expected.toString())+' coins in gifts to '+targets.length+' user(s)?'))return;
     sending=true;
     var button=dom('av6GiftSend');if(button)button.disabled=true;
-    var completed=0,charged=0;
+    var completed=0,charged=0n;
     try{
-      var state=await call('/wallet'),before=Number(state.wallet?.balance);
-      if(!Number.isSafeInteger(before)||price*count*targets.length>before)throw Error('Insufficient real wallet coins');
+      var state=await call('/wallet'),before=coinNumber(state.wallet?.balance);
+      if(expected>before)throw Error('Insufficient real wallet coins');
       for(var i=0;i<targets.length;i++){
         var target=targets[i];
         var result=await call('/community/gift',{itemId:String(chosen.id),recipientId:target.id,quantity:count,requestId:uuid()});
         if(!result.ok)throw Error('Gift not confirmed by server');
-        completed++;charged+=Number(result.total)||0;
+        completed++;charged+=coinNumber(result.total||0);
         if(Number.isSafeInteger(Number(result.balance))){
           window.S.coins=Number(result.balance);
           if(window.lockUI)window.lockUI();
@@ -111,7 +129,7 @@
           try{window.fly('🎁',target.seat,n*85,price)}catch(_){}
         }
       }
-      window.close();say('Sent '+completed+' gift(s), charged '+money(charged)+' real coins');
+      window.close();say('Sent '+completed+' gift(s), charged '+money(charged.toString())+' real coins');
     }catch(e){
       say(completed?('Sent '+completed+' gift(s); remaining stopped: '+(e.message||'error')):(e.message||'Gift failed'));
     }finally{

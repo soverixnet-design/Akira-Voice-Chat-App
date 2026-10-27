@@ -10,6 +10,8 @@ const panel=source('server/src/admin-panel.mjs');
 const control=source('server/src/control.mjs');
 const schema=source('server/migrations/015_admin_live_modules.sql');
 const app=source('web/src/app.js');
+const adminUi=source('server/src/admin-v8.html');
+const webAdminUi=source('web/admin.html');
 
 test('all three uploaded live Admin modules parse as valid ESM',()=>{
   for(const [path,text] of [
@@ -31,6 +33,19 @@ test('Admin routes remain connected and protected by original role checks',()=>{
   assert.match(economy,/super_admin_required/);
   assert.match(panel,/export function serveAdmin/);
   assert.match(panel,/content-security-policy/);
+});
+
+test('connected V8 admin UI is bundled separately from original production admin',()=>{
+  assert.match(panel,/\['\/admin-v8','\/admin-v8\/'\]/);
+  assert.match(panel,/file='\.\/admin-v8\.html'/);
+  assert.equal(adminUi,webAdminUi);
+  for(const section of ['tasksPage','promosPage','supportPage','contentPage']){
+    assert(adminUi.includes(section),section+' was not connected');
+  }
+  const script=adminUi.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+  assert(script,'admin V8 inline script missing');
+  const result=spawnSync(process.execPath,['--check'],{input:script[1],encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);
 });
 
 test('server-verified tasks credit real wallet once and use current daily reward proof',()=>{

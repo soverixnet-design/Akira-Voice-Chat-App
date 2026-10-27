@@ -313,7 +313,7 @@
       if (S.phase === 'spinning' || !S.history[0]) $('hubTime').textContent = '•••';
       else $('hubTime').innerHTML = imgTag(OUT[S.history[0].idx]);
     }
-    $('roundNo').textContent = S.round;
+    $('roundNo').textContent = S.round > 0 ? S.round : '—';
   }
   function renderHistory(fresh) {
     $('history').innerHTML = S.history.slice(0, 10).map((h, k) => {
@@ -380,6 +380,28 @@
       wsSend({ t: 'bet', reqId, round: S.round, itemId: it.id, amount });
       return true;
     }
+    if (S.mode === 'akira') {
+      // Server wallet transaction is the only authority for this wager.
+      if (!akiraLiveActive || akiraBetsBusy) {
+        if (!silent) toast(akiraBetsBusy ? 'Please wait for the previous bet' : (akiraLastError || t('offline')), 3000);
+        return false;
+      }
+      akiraBetsBusy = true;
+      try {
+        const receipt = await CONFIG.betValidator({ round: S.round, itemId: it.id, amount, userId: S.user.id });
+        if (!receipt || !receipt.ok) return false;
+        if (!Number.isSafeInteger(Number(receipt.balance)) || Number(receipt.balance) < 0) throw Error('Invalid wallet response');
+        S.balance = Number(receipt.balance);
+        S.myBets[i] += amount;
+        S.allBets[i] = Math.max(S.allBets[i], S.myBets[i]);
+        bump(el); renderBets(); renderBalance(); syncSharedLocalWallet(S.balance);
+        emit('bet', { round: S.round, itemId: it.id, itemIndex: i, amount, totalOnItem: S.myBets[i], balance: S.balance });
+        return true;
+      } catch (error) {
+        if (!silent) toast(error.message || t('walletErr'), 3000);
+        return false;
+      } finally { akiraBetsBusy = false; }
+    }
     if (CONFIG.betValidator) {
       try { const ok = await CONFIG.betValidator({ round: S.round, itemId: it.id, amount, userId: S.user.id }); if (!ok) return false; }
       catch (e) { return false; }
@@ -415,15 +437,20 @@
     setTimeout(() => d.remove(), 380);
   }
 
-  function repeatBets(silent) {
+  async function repeatBets(silent) {
     if (!S.lastBets) { if (!silent) toast(t('noLast')); return; }
     const need = S.lastBets.reduce((a, b) => a + b, 0);
     if (need > S.balance) { toast(t('noCoins')); if (silent) { S.auto = false; renderAuto(); } return; }
-    // split each amount into chip values so the server accepts them
-    S.lastBets.forEach((amt, i) => {
-      let left = amt;
-      for (const c of CONFIG.chips.slice().sort((a, b) => b - a)) while (left >= c) { placeBet(i, slots[i], c, true); left -= c; }
-    });
+    // Serial server-confirmed bets prevent stale balances or duplicate debits.
+    for (let i = 0; i < S.lastBets.length; i++) {
+      let left = S.lastBets[i];
+      for (const c of CONFIG.chips.slice().sort((a, b) => b - a)) {
+        while (left >= c) {
+          if (!(await placeBet(i, slots[i], c, true))) return;
+          left -= c;
+        }
+      }
+    }
     sfx('bet');
   }
   function renderAuto() { $('btnAuto').classList.toggle('on', S.auto); }
@@ -874,128 +901,162 @@
   }
 
   let akiraLiveActive = false;
+  let akiraBetsBusy = false, akiraSyncBusy = false, akiraLastError = '';
+  let akiraServerClockOffset = 0, akiraRoundEndMs = 0;
+  let akiraLastRoundId = '', akiraLastResultId = '';
+  const akiraNow = () => Date.now() + akiraServerClockOffset;
+  function akiraShowStatus(code) {
+    const labels = {
+      login_required: 'Sign in to Akira to place bets',
+      game_engine_disabled: 'Live game engine is disabled on the server',
+      game_disabled: 'Food Wheel is paused in Admin settings',
+      round_unavailable: 'Live game round cannot be loaded',
+      games_unavailable: 'Akira wallet or games database unavailable',
+      unauthorized: 'Login expired — sign in again',
+      network_error: 'Cannot contact Akira game API'
+    };
+    const message = labels[code] || code || labels.network_error;
+    if (akiraLastError !== message) toast(message, 4500);
+    akiraLastError = message;
+  }
+  function akiraApplyBets(data) {
+    const totals = data.totals && typeof data.totals === 'object' ? data.totals : {};
+    const mine = data.myBets && typeof data.myBets === 'object' ? data.myBets : {};
+    S.myBets = CONFIG.items.map(it => Math.max(0, Number(mine[it.id]) || 0));
+    S.allBets = CONFIG.items.map(it => Math.max(0, Number(totals[it.id]) || 0));
+    S.online = Math.max(0, Number(data.players) || 0);
+    $('onlineCount').textContent = S.online;
+    renderBets();
+  }
+  function akiraShowVerifiedResult(data) {
+    const previous = data.previousRound;
+    if (!previous || !previous.result || !previous.settledAt) return;
+    const id = String(previous.id || '');
+    if (!id || id === akiraLastResultId) return;
+    akiraLastResultId = id;
+    const idx = outIdx(previous.result);
+    if (idx < 0) return;
+    const actual = data.previousMyResult || {};
+    const bet = Number(actual.bet || 0), win = Number(actual.win || 0);
+    S.lastWin = Number.isSafeInteger(win) && win >= 0 ? win : 0;
+    S.history.unshift({ round: Number(id), idx });
+    S.history = S.history.slice(0, 100);
+    if (bet > 0 && Number.isSafeInteger(bet)) {
+      S.records.unshift({ round: Number(id), idx, bet, win: S.lastWin });
+      S.records = S.records.slice(0, 50);
+    }
+    renderHistory(true); renderBalance();
+    emit('round_result', { round: Number(id), resultId: previous.result, totalBet: bet,
+      win: S.lastWin, net: S.lastWin - bet, balance: S.balance, verified: true });
+    toast('Round ' + id + ': ' + previous.result + ' · Won ' + fmt(S.lastWin) + ' coins', 3500);
+  }
   async function syncAkiraServerState() {
-    if (!akiraToken) return;
+    if (akiraSyncBusy || akiraBetsBusy) return;
+    if (!akiraToken) {
+      akiraLiveActive = false; S.phase = 'connecting'; S.balance = 0; S.round = 0;
+      akiraShowStatus('login_required'); renderHub(); renderBalance();
+      return;
+    }
+    akiraSyncBusy = true;
     try {
-      const [ov, rd] = await Promise.all([
-        akiraApi('/games/overview'),
-        akiraApi('/games/food-wheel/round').catch(() => null)
+      const [overview, state] = await Promise.all([
+        akiraApi('/games/overview'), akiraApi('/games/food-wheel/round')
       ]);
-      if (ov && ov.wallet && Number.isFinite(Number(ov.wallet.balance))) {
-        S.balance = Math.max(0, Number(ov.wallet.balance));
-        if (Number.isFinite(Number(ov.todayWinnings24h))) {
-          winWindow.total = Math.max(0, Number(ov.todayWinnings24h));
-          S.todayRev = winWindow.total;
-        }
-        syncSharedLocalWallet(S.balance);
-        renderBalance();
+      const balance = Number(overview && overview.wallet && overview.wallet.balance);
+      if (!Number.isSafeInteger(balance) || balance < 0) throw Error('invalid_server_wallet');
+      S.balance = balance;
+      S.todayRev = Number.isFinite(Number(overview.todayWinnings24h))
+        ? Math.max(0, Number(overview.todayWinnings24h)) : 0;
+      syncSharedLocalWallet(S.balance); renderBalance();
+      if (state && state.serverTime && Number.isFinite(Date.parse(state.serverTime))) {
+        akiraServerClockOffset = Date.parse(state.serverTime) - Date.now();
       }
-      const srvNow = rd && rd.serverTime ? Date.parse(rd.serverTime) : Date.now();
-      const rem = rd && rd.round ? Math.ceil((Date.parse(rd.round.endsAt) - (Number.isFinite(srvNow) ? srvNow : Date.now())) / 1000) : 0;
-      if (rd && rd.bettingEnabled && rd.round && !rd.round.settledAt && rem > 0) {
-        akiraLiveActive = true;
-        const rId = Number(rd.round.id);
-        if (Number.isFinite(rId) && rId > 0) S.round = rId;
-        if (S.phase === 'betting') {
-          S.timeLeft = rem;
-          renderHub();
-        }
-      } else {
-        akiraLiveActive = false;
+      if (!state || !state.bettingEnabled) {
+        akiraLiveActive = false; S.phase = 'connecting'; S.timeLeft = 0;
+        akiraShowStatus((state && state.reason) || 'game_disabled');
+        renderHub(); return;
       }
-    } catch (_) {}
+      const round = state.round;
+      if (!round || !/^\d+$/.test(String(round.id)) || !Number.isFinite(Date.parse(round.endsAt))) {
+        akiraLiveActive = false; S.phase = 'connecting'; S.timeLeft = 0;
+        akiraShowStatus('round_unavailable'); renderHub(); return;
+      }
+      akiraLastError = '';
+      const id = String(round.id);
+      const isNew = id !== akiraLastRoundId;
+      akiraShowVerifiedResult(state);
+      if (isNew) {
+        if (akiraLastRoundId && sumMy() > 0) S.lastBets = S.myBets.slice();
+        akiraLastRoundId = id;
+        resetBoardForBetting();
+      }
+      S.round = Number(id);
+      akiraRoundEndMs = Date.parse(round.endsAt);
+      S.timeLeft = Math.max(0, Math.ceil((akiraRoundEndMs - akiraNow()) / 1000));
+      const bettingOpen = !round.settledAt && S.timeLeft > 0;
+      akiraLiveActive = bettingOpen;
+      S.phase = bettingOpen ? 'betting' : 'connecting';
+      akiraApplyBets(state);
+      renderHub();
+      if (isNew && S.auto && S.lastBets && sumMy() === 0 && bettingOpen) {
+        setTimeout(() => { if (akiraLiveActive) void repeatBets(true); }, 250);
+      }
+    } catch (error) {
+      akiraLiveActive = false; S.phase = 'connecting'; S.timeLeft = 0;
+      const reason = String(error.message || 'network_error');
+      akiraShowStatus(reason === 'Failed to fetch' ? 'network_error' : reason);
+      renderHub();
+    } finally { akiraSyncBusy = false; }
   }
 
   CONFIG.betValidator = async ({ itemId, amount }) => {
-    if (!akiraToken || !akiraLiveActive) { toast('Live game server unavailable'); return false; }
+    if (!akiraToken || !akiraLiveActive) { akiraShowStatus(akiraLastError || 'round_unavailable'); return null; }
     try {
-      const rd = await akiraApi('/games/food-wheel/round');
-      const srvNow = rd && rd.serverTime ? Date.parse(rd.serverTime) : Date.now();
-      const rem = rd && rd.round ? Math.ceil((Date.parse(rd.round.endsAt) - (Number.isFinite(srvNow) ? srvNow : Date.now())) / 1000) : 0;
-      if (!rd.bettingEnabled || !rd.round || rd.round.settledAt || rem <= 0) {
-        akiraLiveActive = false;
-        toast('Betting is closed on the server');
-        return false;
-      }
-      S.round = Number(rd.round.id) || S.round;
-      const d = await akiraApi('/games/food-wheel/bets', 'POST', {
-        roundId: S.round,
-        itemId,
-        amount,
-        requestId: crypto.randomUUID()
+      const receipt = await akiraApi('/games/food-wheel/bets', 'POST', {
+        roundId: S.round, itemId, amount, requestId: crypto.randomUUID()
       });
-      if (Number.isFinite(Number(d.balance))) {
-        S.balance = Number(d.balance) + amount; // placeBet subtracts amount right after validator returns true
-      }
-      return true;
+      if (!receipt || receipt.ok !== true) throw Error('Bet not confirmed by Akira wallet');
+      return receipt;
     } catch (err) {
-      toast(err.message === 'insufficient_balance' ? t('noCoins') : (err.message === 'betting_closed' ? t('betClosed') : t('walletErr')));
-      return false;
+      if (err.message === 'betting_closed') akiraLiveActive = false;
+      toast(err.message === 'insufficient_balance' ? t('noCoins') :
+        (err.message === 'betting_closed' ? t('betClosed') : err.message || t('walletErr')), 3000);
+      return null;
     }
   };
-
-  CONFIG.resultProvider = async () => {
-    if (!akiraToken || !akiraLiveActive) return -1;
-    for (let attempt = 0; attempt < 8; attempt++) {
-      try {
-        const rd = await akiraApi('/games/food-wheel/round');
-        const settled = (rd.round && rd.round.result && Number(rd.round.id) === Number(S.round))
-          ? rd.round
-          : (rd.previousRound && rd.previousRound.result ? rd.previousRound : (rd.round && rd.round.result ? rd.round : null));
-        if (settled && settled.result) {
-          const ov = await akiraApi('/games/overview').catch(() => null);
-          if (ov && ov.wallet && Number.isFinite(Number(ov.wallet.balance))) {
-            S.balance = Number(ov.wallet.balance);
-            window.__akiraServerSettled = true;
-            if (Number.isFinite(Number(ov.todayWinnings24h))) {
-              winWindow.total = Math.max(0, Number(ov.todayWinnings24h));
-              S.todayRev = winWindow.total;
-            }
-          }
-          if (rd.round && !rd.round.settledAt && Number(rd.round.id) > 0) {
-            S.round = Number(rd.round.id) - 1;
-          }
-          return outIdx(settled.result);
-        }
-      } catch (_) {}
-      await new Promise(r => setTimeout(r, 650));
-    }
-    return -1;
-  };
-
+  // No local result generator is used for authenticated coin betting.
+  CONFIG.resultProvider = null;
   window.addEventListener('message', (e) => {
+    if (e.source !== window.parent || e.origin !== location.origin) return;
     const d = e.data;
-    if (!d || typeof d !== 'object') return;
-    if (d.type === 'akira:game-auth') {
-      if (d.token) akiraToken = String(d.token);
-      if (d.apiBase) akiraApiBase = String(d.apiBase);
-      if (typeof d.balance === 'number' && !akiraToken) {
-        S.balance = Math.max(0, d.balance);
-        renderBalance();
-      }
-      syncAkiraServerState();
-    }
+    if (!d || typeof d !== 'object' || d.type !== 'akira:game-auth') return;
+    if (typeof d.token === 'string' && d.token.length > 20) akiraToken = d.token;
+    if (typeof d.apiBase === 'string' && /^https:\/\//.test(d.apiBase)) akiraApiBase = d.apiBase;
+    void syncAkiraServerState();
   });
 
   /* ---------------- BOOT ---------------- */
   buildWheel(); buildChips(); applyLang(); renderUser(); renderSound(); renderBalance();
   fitWheel();
-  try { window.parent?.postMessage({ type: 'akira:game-ready' }, '*'); } catch (_) {}
-  syncAkiraServerState();
-  setInterval(() => { if (akiraToken && S.phase === 'betting') syncAkiraServerState(); }, 5000);
-  setInterval(() => { const previous = S.todayRev; refreshDailyWin(); if (previous !== S.todayRev) renderBalance(); }, 60000);
-  server = qs.get('server') || '';
-  token = qs.get('token') || '';
-  const preset = (window.GREEDY_SERVER || '');
-  const presetOk = preset && !(preset.startsWith('__PORT_') && !['localhost', '127.0.0.1'].includes(location.hostname));
-  if (!server && presetOk && qs.get('demo') !== 'offline') server = preset;
-  if (server) {
-    S.balance = 0; renderBalance();
-    toast(t('connecting'));
-    connect();
+  try { window.parent?.postMessage({ type: 'akira:game-ready' }, location.origin); } catch (_) {}
+  // Legacy WebSocket test mode is available only in local development.
+  const isLocalTest = ['localhost', '127.0.0.1'].includes(location.hostname);
+  server = isLocalTest ? (qs.get('server') || '') : '';
+  token = isLocalTest ? (qs.get('token') || '') : '';
+  if (server && qs.get('demo') === 'offline') {
+    S.balance = 0; renderBalance(); toast(t('connecting')); connect();
   } else {
-    S.history = Array.from({ length: 20 }, (_, k) => ({ round: S.round - 1 - k, idx: pickRandom() })).filter((h) => h.round > 0);
-    emit('ready', { version: API.version, mode: 'demo' });
-    demoStartBetting();
+    S.mode = 'akira';
+    S.phase = 'connecting';
+    S.balance = 0; S.round = 0; S.online = 0;
+    $('onlineCount').textContent = '0';
+    renderBalance(); renderHub();
+    void syncAkiraServerState();
+    setInterval(() => { void syncAkiraServerState(); }, 2000);
+    setInterval(() => {
+      if (S.mode !== 'akira' || S.phase !== 'betting') return;
+      const seconds = Math.max(0, Math.ceil((akiraRoundEndMs - akiraNow()) / 1000));
+      if (S.timeLeft !== seconds) { S.timeLeft = seconds; renderHub(); }
+    }, 250);
   }
 })();

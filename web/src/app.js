@@ -11,7 +11,7 @@ var CFG={
  rooms:[],
   people:[["Rafi","🧑‍🎤"],["Nusrat","👩‍🦰"],["Sakib","🧔"],["Mim","👧"],["Tanvir","🧑‍💻"],["Faria","👩‍🎓"],["Arif","🧑‍🚀"],["Sumi","👩‍🍳"],["Hasan","🧑‍🔧"],["Lima","👩‍⚕️"]],
  wealth:[9800000,7400000,6100000,4900000,3800000,2900000,2300000,1800000,1400000,1100000],
- chats:[["Customer service","🎧","Tell us your problem, we will help","Now"],["System notifications","🔔","Do not forget your daily reward!","1h"],["Rafi","🧑‍🎤","Coming tonight?","2h"],["Nusrat","👩‍🦰","Thanks for the gift 💜","5h"]]
+ chats:[]
 };
 /* ===== Profile and state (will come from the server after login) ===== */
 function ls(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}}
@@ -347,7 +347,7 @@ function renderRcp(skipFetch){
   if(!RCT){
     h+='<div class="rh"><h3>Recharge packages</h3><span>🇧🇩 Bangladesh</span></div><div class="pk"><p>Choose a package and send a recharge request for approval.</p>'+P.map(function(p,i){return'<button data-p="'+i+'"><span>🪙 '+N(p[0])+' Coins</span><em>'+p[1]+' ›</em></button>'}).join("")+'</div>'+
     '<button class="cta bl" id="rcs">Contact recharge support</button><button class="cta or" id="rcl2">Coin seller list</button>'+
-    '<details class="rk"><summary>🏆 Recharge, sending and receiving rankings</summary>'+CFG.people.slice(0,5).map(function(p,i){return'<div><span>'+(i+1)+'. '+p[1]+' '+esc(p[0])+'</span><b>🪙 '+rf(CFG.wealth[i])+'</b></div>'}).join("")+'</details>';
+    '<div class="lbl">See Rank → Recharge for verified leaderboard results.</div>';
   }else{
     h+='<div class="rh"><h3>Diamond exchange</h3></div><div class="rate">Rate: 100 💎 = '+bn(Math.round(RATE*100))+' 🪙</div><div class="pk"><p>Buy gold coins with diamonds earned from gifts.</p>'+X.map(function(d,i){return'<button data-e="'+i+'"><span>💎 '+N(d)+'</span><em>🪙 '+N(Math.round(d*RATE))+' ›</em></button>'}).join("")+'</div>';
   }
@@ -371,12 +371,12 @@ function renderRcp(skipFetch){
   if($("rcs"))$("rcs").onclick=sellerSheet;
   if($("rcl2"))$("rcl2").onclick=sellerSheet;
 }
-var SELL=[["Rafi Coin Hub","🧑‍🎤","100002"],["Nusrat Recharge","👩‍🦰","100145"],["Sakib Coin Seller","🧔","100317"],["Tanvir Store","🧑‍💻","100482"],["Faria Coin Point","👩‍🎓","100659"]];
+var SELL=[]; // Sellers must be verified by the server.
 function sellerSheet(){
   var renderList=function(list){
     openSheet('<h3>🪙 Verified Coin Sellers</h3><div class="rate">Tap a seller to chat or copy their ID</div>'+list.map(function(x,i){return'<div class="slr" data-s="'+i+'"><div class="sa">'+(x[3]?'<img src="'+esc(x[3])+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover">':x[1])+'</div><div class="sn"><b>'+esc(x[0])+'</b><small>🟢 '+esc(x[4]||'Verified Seller')+' · ID '+esc(x[2])+'</small></div><button class="scp" data-c="'+i+'">Copy</button><span class="sg">💬</span></div>'}).join(""));
     $("sh").querySelectorAll("[data-c]").forEach(function(b){b.onclick=function(e){e.stopPropagation();try{navigator.clipboard.writeText(list[+b.dataset.c][2])}catch(x){}toast("ID Copied ✓")}});
-    $("sh").querySelectorAll("[data-s]").forEach(function(r){r.onclick=function(){var x=list[+r.dataset.s];closeSheet();openThread([x[0],x[1],"Assalamu alaikum! Need coins?? 🪙","Now"])}});
+    $("sh").querySelectorAll("[data-s]").forEach(function(r){r.onclick=function(){var x=list[+r.dataset.s];closeSheet();openThread({id:x[2],name:x[0],e:x[1],pic:x[3]})}});
   };
   renderList(SELL);
   if(akiraToken()){
@@ -384,7 +384,7 @@ function sellerSheet(){
       var items=(res&&(res.items||res.sellers))||[];
       if(items.length){
         var live=items.map(function(s){return[s.name||("Seller "+s.id),"💎",String(s.id),s.pic||null,s.contact||"Official Seller"];});
-        renderList(live.concat(SELL));
+        renderList(live);
       }
     }).catch(function(){});
   }
@@ -433,32 +433,44 @@ var rtab=1,rper=1,liveRankCache={};
 function rf(n){var x=n>=1e6?(n/1e6).toFixed(2).replace(/\.?0+$/,"")+"m":n>=1e3?(n/1e3).toFixed(2).replace(/\.?0+$/,"")+"k":String(n);return x}
 function wingSVG(){var b='';for(var k=0;k<6;k++){var a=-8+k*14,l=150-k*8;b+='<path d="M200 100 L'+(200-l*1.1)+' '+(100-60+k*16)+' L'+(200-l*1.05)+' '+(100-40+k*17)+' Z" transform="rotate('+(a-8)+' 200 100)" fill="url(#gw)" stroke="#b45309" stroke-width="1"/>'}
 return'<svg class="wings" viewBox="0 0 400 190"><defs><linearGradient id="gw" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff3b0"/><stop offset=".5" stop-color="#f6b92b"/><stop offset="1" stop-color="#b45309"/></linearGradient></defs><g>'+b+'</g><g transform="translate(400 0) scale(-1 1)">'+b+'</g></svg>'}
+function requestVerifiedRanking(cKey,type,period){
+  if(!akiraToken()||liveRankCache[cKey+"_loading"]||liveRankCache[cKey+"_loaded"])return;
+  liveRankCache[cKey+"_loading"]=true;
+  akiraRequest("/api/v1/community/rankings?period="+period+"&type="+type,"GET",undefined,akiraToken()).then(function(res){
+    liveRankCache[cKey+"_loading"]=false;liveRankCache[cKey+"_loaded"]=true;
+    liveRankCache[cKey]=Array.isArray(res?.items)?res.items.map(function(it){
+      var isMe=String(it.id)===String(A.id);
+      return{id:String(it.id),n:isMe?A.name:(it.name||"User"),e:"🏆",pic:isMe?(A.pic||it.pic||null):(it.pic||null),v:Number(it.score||0),real:true};
+    }):[];
+    if($("v-rank").classList.contains("on"))renderRank();
+  }).catch(function(err){
+    liveRankCache[cKey+"_loading"]=false;liveRankCache[cKey+"_loaded"]=true;
+    liveRankCache[cKey+"_error"]=String(err?.message||"Service unavailable");
+    if($("v-rank").classList.contains("on"))renderRank();
+  });
+}
 function renderRank(){
-  var F=[1,6.2,24][rper],L=[],OFF=[5,0,3,0,7,1,4],SC=[.5,1,.4,1,.3,.25,.6];
+  var L=[];
   var types=["lucky","rich","charm","room","noble","play","recharge"];
   var periods=["day","week","month"];
   var cKey=types[rtab]+":"+periods[rper];
   if(rtab===3){
-    var rms=roomList();
-    L=rms.slice().sort(function(a,b){return (b.n||1)-(a.n||1)}).map(function(r,idx){
-      return{id:String(r.id),n:r.name,e:r.emoji||"🎙️",pic:r.pic||r.coverUrl||null,v:Math.round(Math.max(1,r.n||1)*9000*F+(10-idx)*500),room:1,rawRoom:r};
+    L=roomList().slice().sort(function(a,b){return (b.n||0)-(a.n||0)}).map(function(r){
+      return{id:String(r.id),n:r.name,e:r.emoji||"🎙️",pic:r.pic||r.coverUrl||null,v:Number(r.n||0),room:1,rawRoom:r};
     });
-  }else if(Array.isArray(liveRankCache[cKey])&&liveRankCache[cKey].length>=3){
-    L=liveRankCache[cKey].slice();
   }else{
-    for(var i=0;i<10;i++){
-      var p=CFG.people[(i+OFF[rtab])%10];
-      L.push({id:String(30000000+hsh(p[0])%60000000),lv:60-i*4,n:p[0],e:p[1],pic:null,v:Math.round(CFG.wealth[(i+OFF[rtab])%10]*F*SC[rtab]),real:false});
-    }
-    if(Array.isArray(liveRankCache[cKey])&&liveRankCache[cKey].length){
-      liveRankCache[cKey].forEach(function(item,idx){L[idx]=item;});
-    }
+    L=Array.isArray(liveRankCache[cKey])?liveRankCache[cKey].slice():[];
+    requestVerifiedRanking(cKey,types[rtab],periods[rper]);
   }
-  while(L.length<3){
-    L.push({id:String(100001+L.length),n:"Akira Star #"+(L.length+1),e:"🌟",pic:null,v:1000,room:rtab===3?1:0});
+  if(L.length<3){
+    var msg=liveRankCache[cKey+"_error"]?"Verified rankings are temporarily unavailable":
+      liveRankCache[cKey+"_loaded"]?"Fewer than three verified ranking entries":
+      rtab===3?"Fewer than three active rooms":"Loading verified rankings…";
+    $("rb").innerHTML='<div class="empty">'+esc(msg)+L.map(function(u,i){return'<div class="rr" style="margin-top:9px">'+(i+1)+'. '+esc(u.n)+' · '+rf(u.v)+'</div>'}).join("")+'</div>';
+    return;
   }
   var myIdx=L.findIndex(function(u){return String(u.id)===String(A.id)});
-  var myScore=myIdx>=0?L[myIdx].v:(rtab===1?coins():Math.round((coins()||5000)*SC[rtab]));
+  var myScore=myIdx>=0?L[myIdx].v:0;
   var idl=function(u){return'<span class="idl"><i class="idb">ID</i>'+u.id+'</span>'},cv=function(u){return'<div class="cv"><i class="cn"></i>'+rf(u.v)+'</div>'};
   var avIn=function(u){return u.pic?'<div style="background:url('+u.pic+') center/cover;width:100%;height:100%;border-radius:50%"></div>':'<div>'+(u.e||"👤")+'</div>'};
   var pod=function(i,c){var u=L[i];return'<div class="pp '+c+'" data-u="'+i+'" style="cursor:pointer"><div class="gr">'+avIn(u)+'</div><b>'+esc(u.n)+'</b>'+idl(u)+cv(u)+'</div>'};
@@ -471,20 +483,7 @@ function renderRank(){
     return'<div class="rr" data-u="'+(i+3)+'" style="cursor:pointer"><b class="n">'+(i+4)+'</b><div class="ra" style="'+rStyle+'">'+(u.pic?"":(u.e||"👤"))+'</div><div class="rn"><b>'+esc(u.n)+'</b>'+idl(u)+'</div><div class="rv"><i class="cn"></i>'+rf(u.v)+'</div></div>';
   }).join("");
   $("rb").innerHTML=h;rankWire(L);
-  if(akiraToken()&&rtab!==3&&!liveRankCache[cKey+"_loading"]){
-    liveRankCache[cKey+"_loading"]=true;
-    akiraRequest("/api/v1/community/rankings?period="+periods[rper]+"&type="+types[rtab],"GET",undefined,akiraToken()).then(function(res){
-      liveRankCache[cKey+"_loading"]=false;
-      if(res&&Array.isArray(res.items)&&res.items.length){
-        var mapped=res.items.map(function(it,idx){
-          var isMe=String(it.id)===String(A.id);
-          return{id:String(it.id),n:isMe?A.name:(it.name||"User"),e:"🏆",pic:isMe?(A.pic||it.pic||null):(it.pic||null),v:Number(it.score||0),lv:20-idx,real:true};
-        });
-        liveRankCache[cKey]=mapped;
-        if($("v-rank").classList.contains("on"))renderRank();
-      }
-    }).catch(function(){liveRankCache[cKey+"_loading"]=false;});
-  }
+
 }
 $("rbk").onclick=function(){go("home")};
 [["rt",function(i){rtab=i}],["rp",function(i){rper=i}]].forEach(function(p){$(p[0]).querySelectorAll("button").forEach(function(b,i){b.onclick=function(){p[1](i);$(p[0]).querySelectorAll("button").forEach(function(x,k){x.classList.toggle("on",k===i)});renderRank()}})});

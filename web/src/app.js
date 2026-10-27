@@ -8,16 +8,8 @@ var fmt=function(n){return n>=1e6?bn((n/1e6).toFixed(1))+"M":n>=1e3?bn((n/1e3).t
 /* ===== Config: this data will come from the server/admin later ===== */
 var CFG={
  banners:[{t:"Daily check-in reward",s:"Join daily, win coins",e:"🎁",c:"#f59e0b,#ff3dc8",a:"daily"},{t:"Double coins on first recharge",s:"Limited time offer",e:"💎",c:"#9b4dff,#0ea5e9",a:"recharge"},{t:"Room ranking event",s:"Be the best room and win prizes",e:"🏆",c:"#10b981,#3b82f6",a:"rank"}],
- rooms:[
- {id:"10482915",name:"Chat House ✨",emoji:"🎙️",c:"#9b4dff,#4c1d95",n:128,host:"Rafi",tag:"Chat",mics:["😎","👩‍🦰","🧔"],th:"mid"},
- {id:"10551230",name:"Song Night 🎶",emoji:"🎤",c:"#ff3dc8,#9d174d",n:342,host:"Nusrat",tag:"Songs",mics:["👩‍🦰","🧑‍🎤","👧"],th:"rose"},
- {id:"10620877",name:"Dhaka Night 🌙",emoji:"🌙",c:"#0ea5e9,#075985",n:215,host:"Sakib",tag:"Night Chat",mics:["🧔","🧑‍💻","👩‍🎓"],th:"ocean"},
- {id:"10734561",name:"Football Fans ⚽",emoji:"⚽",c:"#10b981,#065f46",n:96,host:"Tanvir",tag:"Play",mics:["🧑‍💻","🧔"],th:"forest"},
- {id:"10809934",name:"Poetry Corner 📖",emoji:"📖",c:"#f59e0b,#92400e",n:64,host:"Faria",tag:"Poetry",mics:["👩‍🎓","👧"],th:"gold"},
- {id:"10917742",name:"Gamers Zone 🎮",emoji:"🎮",c:"#a855f7,#581c87",n:187,host:"Arif",tag:"Games",mics:["🧑‍🚀","😎","🧔"],th:"sunset"},
- {id:"11023356",name:"Expat Friends 🌍",emoji:"🌍",c:"#14b8a6,#115e59",n:153,host:"Hasan",tag:"Expat",mics:["🧑‍🔧","👩‍🍳"],th:"ocean"},
- {id:"11145209",name:"Night Stories 💬",emoji:"💬",c:"#f43f5e,#881337",n:78,host:"Mim",tag:"Stories",mics:["👧","👩‍🦰"],th:"rose"}],
- people:[["Rafi","🧑‍🎤"],["Nusrat","👩‍🦰"],["Sakib","🧔"],["Mim","👧"],["Tanvir","🧑‍💻"],["Faria","👩‍🎓"],["Arif","🧑‍🚀"],["Sumi","👩‍🍳"],["Hasan","🧑‍🔧"],["Lima","👩‍⚕️"]],
+ rooms:[],
+  people:[["Rafi","🧑‍🎤"],["Nusrat","👩‍🦰"],["Sakib","🧔"],["Mim","👧"],["Tanvir","🧑‍💻"],["Faria","👩‍🎓"],["Arif","🧑‍🚀"],["Sumi","👩‍🍳"],["Hasan","🧑‍🔧"],["Lima","👩‍⚕️"]],
  wealth:[9800000,7400000,6100000,4900000,3800000,2900000,2300000,1800000,1400000,1100000],
  chats:[["Customer service","🎧","Tell us your problem, we will help","Now"],["System notifications","🔔","Do not forget your daily reward!","1h"],["Rafi","🧑‍🎤","Coming tonight?","2h"],["Nusrat","👩‍🦰","Thanks for the gift 💜","5h"]]
 };
@@ -1462,30 +1454,7 @@ setTimeout(function(){$("sp").classList.add("off")},1300);
     if(!active)renderCard(queue.shift());
   };
 
-  // Detect user's own game win whenever wallet balance increases while game overlay is open
-  var prevBal=null;
-  window.addEventListener("akira:wallet-updated",function(e){
-    var newBal=(e&&e.detail&&typeof e.detail.balance==="number")?e.detail.balance:coins();
-    if(typeof newBal==="number"&&Number.isFinite(newBal)){
-      var gameOpen=document.getElementById("akiraGameOverlay")&&document.getElementById("akiraGameOverlay").classList.contains("open");
-      if(prevBal!==null&&newBal>prevBal&&gameOpen){
-        var diff=newBal-prevBal;
-        var activeTab=document.querySelector("#akiraGameOverlay .gameTab.on");
-        var gName=activeTab&&activeTab.dataset.g==="jackpot-fruit"?"Jackpot Fruit":"Food Wheel";
-        window.showAkira3DBanner({
-          kind:"win",
-          name:A.name||"You",
-          user_id:String(A.id),
-          pic:A.pic||null,
-          amount:diff,
-          game:gName
-        },true);
-      }
-      prevBal=newBal;
-    }
-  });
-  setTimeout(function(){prevBal=coins();},1200);
-
+  // Game wins must come from server-settled events, not inferred wallet changes.
   // Poll live server feed (/api/v1/community/live-feed) for real wins & gifts
   async function pollLiveFeed(){
     try{
@@ -1507,27 +1476,7 @@ setTimeout(function(){$("sp").classList.add("off")},1300);
   setTimeout(pollLiveFeed,2500);
   setInterval(pollLiveFeed,12000);
 
-  // Ambient live ticker showcase when queue is idle so 3D motion cards keep flowing
-  var demoIdx=0;
-  var demoFeed=[
-    {kind:"win",name:"Rafi",user_id:"100002",senderEmoji:"🧑‍🎤",amount:4500,game:"Food Wheel"},
-    {kind:"gift",senderName:"Nusrat",senderId:"100145",senderEmoji:"👩‍🦰",recipientName:"Sakib",giftIcon:"👑",giftName:"Crown",qty:1,amount:19900},
-    {kind:"win",name:"Tanvir",user_id:"100482",senderEmoji:"🧑‍💻",amount:12000,game:"Jackpot Fruit"},
-    {kind:"gift",senderName:"Faria",senderId:"100659",senderEmoji:"👩‍🎓",recipientName:"Mim",giftIcon:"🐉",giftName:"Dragon",qty:1,amount:5000},
-    {kind:"win",name:"Arif",user_id:"100811",senderEmoji:"🧑‍🚀",amount:8200,game:"Food Wheel"}
-  ];
-  setTimeout(function(){
-    if(!active&&!queue.length){
-      window.showAkira3DBanner(demoFeed[0],false);
-      demoIdx=1;
-    }
-  },1800);
-  setInterval(function(){
-    if(!active&&!queue.length&&!document.hidden){
-      var item=Object.assign({},demoFeed[demoIdx%demoFeed.length]);
-      demoIdx++;
-      window.showAkira3DBanner(item,false);
-    }
-  },14000);
+  // Only authenticated server events appear in the live ticker.
+
 })();
 

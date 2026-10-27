@@ -47,17 +47,17 @@ test('verified ID seller transfers debit the real seller ledger',()=>{
   const ui=file('web/src/wallet-v7.js');
   const backend=file('server/src/server.mjs');
   const ledger=file('server/src/seller-wallet.mjs');
-  assert.match(ui,/community\\/seller-recipient\\?id=/);
-  assert.match(ui,/seller\\/wallet/);
-  assert.match(ui,/seller\\/transfer/);
-  assert.match(ui,/crypto\\.randomUUID\\(\\)/);
-  assert.match(backend,/sellerSend\\(user\\.id,body\\.publicId,body\\.amount,body\\.requestId\\)/);
+  assert.match(ui,/community\/seller-recipient\?id=/);
+  assert.match(ui,/seller\/wallet/);
+  assert.match(ui,/seller\/transfer/);
+  assert.match(ui,/crypto\.randomUUID\(\)/);
+  assert.match(backend,/sellerSend\(user\.id,body\.publicId,body\.amount,body\.requestId\)/);
   assert.match(ledger,/INSERT INTO akira_wallet_transactions/);
 });
 test('room seat and Google login API routes are in the real server handler',()=>{
   const server=file('server/src/server.mjs');
   const control=file('server/src/control.mjs');
-  assert.match(server,/auth\\/google\\/config/);
+  assert.match(server,/auth\/google\/config/);
   assert.match(server,/const seatRoute/);
   assert.match(control,/publicPath&&section==='gift-policy'/);
 });

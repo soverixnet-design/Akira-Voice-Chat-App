@@ -1,6 +1,15 @@
 import { controlRoutes } from './control.mjs';
-import { serveAdmin } from './admin-panel.mjs';
+// The live admin panel is an optional server-owned module; do not remove it.
+let serveAdmin=()=>false;
+try{
+  const legacy=await import('./admin-panel.mjs');
+  if(typeof legacy.serveAdmin==='function')serveAdmin=legacy.serveAdmin;
+}catch(err){if(err.code!=='ERR_MODULE_NOT_FOUND'||!String(err.message).includes('admin-panel.mjs'))throw err;}
 import { getWallet, walletHistory } from './wallet.mjs';
+import { sellerBalance, sellerCredit, sellerSend } from './seller-wallet.mjs';
+import { setSellerStatus } from './seller-admin.mjs';
+import { adminUpdateRoom } from './admin-room-control.mjs';
+import { deletionRequestStatus, submitDeletionRequest } from './account-deletion.mjs';
 import { placeGameBet } from './game-bets.mjs';
 import { googleClientId, googleSignIn, linkGoogleAccount } from './google-auth.mjs';
 import { roomSeats, setSeat, updateRoomSettings } from './room-seats.mjs';
@@ -126,6 +135,55 @@ export const requestHandler = async (req, res) => {
       console.error('auth_failed',err.code || err.message);
       return send(503,{error:'auth_unavailable'});
     }
+  }
+  if (req.method === 'GET' && url.pathname === '/api/v1/sellers') {
+    try {
+      const {rows}=await getPool().query("SELECT u.public_id AS \"publicId\",u.display_name AS \"displayName\",u.avatar_url AS \"avatarUrl\" FROM akira_seller_wallets s JOIN akira_users u ON u.id=s.user_id WHERE s.enabled=true AND u.is_banned=false ORDER BY u.public_id LIMIT 200");
+      return send(200,{sellers:rows});
+    } catch(err) {console.error('seller_list_failed',err.message);return send(503,{error:'seller_list_unavailable'});}
+  }
+  if (['/api/v1/seller/wallet','/api/v1/seller/transfer','/api/v1/seller/history','/api/v1/admin/sellers/allocate','/api/v1/admin/sellers/status'].includes(url.pathname)) {
+    try {
+      if (url.pathname==='/api/v1/admin/sellers/allocate') {
+        if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+        const admin=await requireAdmin(req.headers.authorization);
+        if(admin.error)return send(admin.status,{error:admin.error});
+        if(admin.role!=='super_admin')return send(403,{error:'super_admin_required'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+        let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'invalid_json'});}
+        const result=await sellerCredit(admin.user.id,body.publicId,body.amount,body.requestId);
+        return send(result.status,result);
+      }
+      if (url.pathname==='/api/v1/admin/sellers/status') {
+        if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+        const admin=await requireAdmin(req.headers.authorization);
+        if(admin.error)return send(admin.status,{error:admin.error});
+        if(admin.role!=='super_admin')return send(403,{error:'super_admin_required'});
+        let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+        let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'invalid_json'});}
+        const result=await setSellerStatus(admin.user.id,body?.publicId,body?.enabled);
+        return send(result.status,result);
+      }
+      const user=await authenticate(req.headers.authorization);
+      if(!user)return send(401,{error:'unauthorized'});
+      if(url.pathname==='/api/v1/seller/history'){
+        if(req.method!=='GET')return send(405,{error:'method_not_allowed'});
+        const seller=await sellerBalance(user.id);
+        if(!seller||!seller.enabled)return send(403,{error:'seller_not_enabled'});
+        const {rows}=await getPool().query('SELECT t.id,u.public_id AS "recipientId",t.amount,t.created_at AS "createdAt" FROM akira_seller_transfers t JOIN akira_users u ON u.id=t.recipient_id WHERE t.seller_id=$1 ORDER BY t.id DESC LIMIT 50',[user.id]);
+        return send(200,{transfers:rows});
+      }
+      if(url.pathname==='/api/v1/seller/wallet'){
+        if(req.method!=='GET')return send(405,{error:'method_not_allowed'});
+        const wallet=await sellerBalance(user.id);
+        return wallet&&wallet.enabled?send(200,{wallet}):send(403,{error:'seller_not_enabled'});
+      }
+      if(req.method!=='POST')return send(405,{error:'method_not_allowed'});
+      let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)return send(413,{error:'payload_too_large'});}
+      let body;try{body=JSON.parse(raw);}catch{return send(400,{error:'invalid_json'});}
+      const result=await sellerSend(user.id,body.publicId,body.amount,body.requestId);
+      return send(result.status,result);
+    }catch(err){console.error('seller_wallet_failed',err.message);return send(503,{error:'seller_wallet_unavailable'});}
   }
   if (req.method === 'GET' && ['/api/v1/wallet','/api/v1/wallet/history'].includes(url.pathname)) {
     try {
